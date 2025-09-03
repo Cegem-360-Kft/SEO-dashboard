@@ -1,14 +1,21 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Models\AuditLog;
+use App\Models\Keyword;
+use App\Models\Project;
+use App\Models\Report;
+use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\AuditLog>
+ * @extends Factory<AuditLog>
  */
-class AuditLogFactory extends Factory
+final class AuditLogFactory extends Factory
 {
     /**
      * Define the model's default state.
@@ -23,11 +30,11 @@ class AuditLogFactory extends Factory
             'keyword.created', 'keyword.updated', 'keyword.deleted', 'keyword.imported',
             'report.generated', 'report.downloaded', 'report.shared',
             'settings.updated', 'api.accessed', 'data.exported',
-            'security.unauthorized_access', 'security.login_failed', 'security.password_changed'
+            'security.unauthorized_access', 'security.login_failed', 'security.password_changed',
         ];
-        
+
         $event = fake()->randomElement($events);
-        
+
         return [
             'event' => $event,
             'auditable_type' => $this->generateAuditableType($event),
@@ -42,19 +49,109 @@ class AuditLogFactory extends Factory
     }
 
     /**
+     * Create a security event
+     */
+    public function securityEvent(): static
+    {
+        $securityEvents = [
+            'security.unauthorized_access', 'security.login_failed',
+            'security.password_changed', 'security.suspicious_activity',
+        ];
+
+        return $this->state(fn (array $attributes): array => [
+            'event' => fake()->randomElement($securityEvents),
+            'tags' => ['security', 'alert'],
+        ]);
+    }
+
+    /**
+     * Create an authentication event
+     */
+    public function authEvent(): static
+    {
+        $authEvents = ['user.login', 'user.logout', 'user.password_changed'];
+
+        return $this->state(fn (array $attributes): array => [
+            'event' => fake()->randomElement($authEvents),
+            'tags' => ['authentication'],
+        ]);
+    }
+
+    /**
+     * Create a data modification event
+     */
+    public function dataModification(): static
+    {
+        $dataEvents = [
+            'project.created', 'project.updated', 'project.deleted',
+            'keyword.created', 'keyword.updated', 'keyword.deleted',
+            'user.created', 'user.updated', 'user.deleted',
+        ];
+
+        return $this->state(fn (array $attributes): array => [
+            'event' => fake()->randomElement($dataEvents),
+            'tags' => ['data_modification'],
+        ]);
+    }
+
+    /**
+     * Create an API access event
+     */
+    public function apiAccess(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'event' => 'api.accessed',
+            'tags' => ['api', 'access'],
+            'new_values' => [
+                'endpoint' => fake()->randomElement(['/api/projects', '/api/keywords', '/api/reports']),
+                'method' => fake()->randomElement(['GET', 'POST', 'PUT', 'DELETE']),
+                'response_code' => fake()->randomElement([200, 201, 400, 401, 403]),
+                'response_time' => fake()->numberBetween(50, 1000),
+            ],
+        ]);
+    }
+
+    /**
+     * Create an event for specific model
+     */
+    public function forModel(string $modelType, int $modelId): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'auditable_type' => $modelType,
+            'auditable_id' => $modelId,
+        ]);
+    }
+
+    /**
+     * Create a failed login attempt
+     */
+    public function failedLogin(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'event' => 'security.login_failed',
+            'tags' => ['security', 'authentication', 'failed_login'],
+            'new_values' => [
+                'email' => fake()->email(),
+                'reason' => fake()->randomElement(['invalid_credentials', 'account_locked']),
+                'attempts_count' => fake()->numberBetween(1, 5),
+            ],
+        ]);
+    }
+
+    /**
      * Generate auditable type based on event
      */
     private function generateAuditableType(string $event): ?string
     {
         $eventParts = explode('.', $event);
         $resource = $eventParts[0] ?? null;
-        
+
         return match ($resource) {
-            'user' => 'App\\Models\\User',
-            'project' => 'App\\Models\\Project',
-            'keyword' => 'App\\Models\\Keyword',
-            'report' => 'App\\Models\\Report',
-            'tenant' => 'App\\Models\\Tenant',
+            'user' => User::class,
+            'project' => Project::class,
+            'keyword' => Keyword::class,
+            'report' => Report::class,
+            'tenant' => Tenant::class,
             default => null
         };
     }
@@ -73,7 +170,7 @@ class AuditLogFactory extends Factory
                     'is_active' => fake()->boolean(),
                 ],
                 str_contains($event, 'project.') => [
-                    'name' => fake()->company() . ' Website',
+                    'name' => fake()->company().' Website',
                     'url' => fake()->url(),
                     'is_active' => fake()->boolean(),
                     'settings' => ['tracking_frequency' => 'weekly'],
@@ -92,7 +189,7 @@ class AuditLogFactory extends Factory
                 default => []
             };
         }
-        
+
         return null;
     }
 
@@ -124,14 +221,14 @@ class AuditLogFactory extends Factory
                 'updated_fields' => fake()->randomElements(['name', 'email', 'role', 'permissions'], 2),
             ],
             str_contains($event, 'project.created') => [
-                'name' => fake()->company() . ' SEO Project',
+                'name' => fake()->company().' SEO Project',
                 'url' => fake()->url(),
                 'target_countries' => fake()->randomElements(['US', 'GB', 'CA'], 2),
                 'is_active' => true,
             ],
             str_contains($event, 'keyword.imported') => [
                 'imported_count' => fake()->numberBetween(10, 500),
-                'file_name' => fake()->word() . '_keywords.csv',
+                'file_name' => fake()->word().'_keywords.csv',
                 'file_size' => fake()->numberBetween(1024, 102400),
             ],
             str_contains($event, 'report.generated') => [
@@ -173,123 +270,33 @@ class AuditLogFactory extends Factory
     private function generateTags(string $event): array
     {
         $tags = [];
-        
+
         if (str_contains($event, 'security.') || str_contains($event, 'unauthorized') || str_contains($event, 'failed')) {
             $tags[] = 'security';
         }
-        
+
         if (str_contains($event, 'login') || str_contains($event, 'logout')) {
             $tags[] = 'authentication';
         }
-        
+
         if (str_contains($event, 'api.')) {
             $tags[] = 'api';
         }
-        
+
         if (str_contains($event, '.created') || str_contains($event, '.updated') || str_contains($event, '.deleted')) {
             $tags[] = 'data_modification';
         }
-        
+
         if (str_contains($event, '.accessed') || str_contains($event, '.downloaded')) {
             $tags[] = 'data_access';
         }
-        
+
         // Add resource-specific tags
         $eventParts = explode('.', $event);
-        if (!empty($eventParts[0])) {
+        if (isset($eventParts[0]) && ($eventParts[0] !== '' && $eventParts[0] !== '0')) {
             $tags[] = $eventParts[0];
         }
-        
+
         return array_unique($tags);
-    }
-
-    /**
-     * Create a security event
-     */
-    public function securityEvent(): static
-    {
-        $securityEvents = [
-            'security.unauthorized_access', 'security.login_failed', 
-            'security.password_changed', 'security.suspicious_activity'
-        ];
-        
-        return $this->state(fn (array $attributes) => [
-            'event' => fake()->randomElement($securityEvents),
-            'tags' => ['security', 'alert'],
-        ]);
-    }
-
-    /**
-     * Create an authentication event
-     */
-    public function authEvent(): static
-    {
-        $authEvents = ['user.login', 'user.logout', 'user.password_changed'];
-        
-        return $this->state(fn (array $attributes) => [
-            'event' => fake()->randomElement($authEvents),
-            'tags' => ['authentication'],
-        ]);
-    }
-
-    /**
-     * Create a data modification event
-     */
-    public function dataModification(): static
-    {
-        $dataEvents = [
-            'project.created', 'project.updated', 'project.deleted',
-            'keyword.created', 'keyword.updated', 'keyword.deleted',
-            'user.created', 'user.updated', 'user.deleted'
-        ];
-        
-        return $this->state(fn (array $attributes) => [
-            'event' => fake()->randomElement($dataEvents),
-            'tags' => ['data_modification'],
-        ]);
-    }
-
-    /**
-     * Create an API access event
-     */
-    public function apiAccess(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'event' => 'api.accessed',
-            'tags' => ['api', 'access'],
-            'new_values' => [
-                'endpoint' => fake()->randomElement(['/api/projects', '/api/keywords', '/api/reports']),
-                'method' => fake()->randomElement(['GET', 'POST', 'PUT', 'DELETE']),
-                'response_code' => fake()->randomElement([200, 201, 400, 401, 403]),
-                'response_time' => fake()->numberBetween(50, 1000),
-            ],
-        ]);
-    }
-
-    /**
-     * Create an event for specific model
-     */
-    public function forModel(string $modelType, int $modelId): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'auditable_type' => $modelType,
-            'auditable_id' => $modelId,
-        ]);
-    }
-
-    /**
-     * Create a failed login attempt
-     */
-    public function failedLogin(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'event' => 'security.login_failed',
-            'tags' => ['security', 'authentication', 'failed_login'],
-            'new_values' => [
-                'email' => fake()->email(),
-                'reason' => fake()->randomElement(['invalid_credentials', 'account_locked']),
-                'attempts_count' => fake()->numberBetween(1, 5),
-            ],
-        ]);
     }
 }

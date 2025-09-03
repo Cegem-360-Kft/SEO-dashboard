@@ -1,14 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Models\Report;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Report>
+ * @extends Factory<Report>
  */
-class ReportFactory extends Factory
+final class ReportFactory extends Factory
 {
     /**
      * Define the model's default state.
@@ -19,7 +22,7 @@ class ReportFactory extends Factory
     {
         $type = fake()->randomElement(['positions', 'keywords', 'competitors', 'overview', 'custom']);
         $frequency = fake()->randomElement(['manual', 'daily', 'weekly', 'monthly', 'quarterly']);
-        
+
         return [
             'name' => $this->generateReportName($type),
             'description' => fake()->paragraph(),
@@ -46,6 +49,100 @@ class ReportFactory extends Factory
     }
 
     /**
+     * Create a completed report
+     */
+    public function completed(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => 'completed',
+            'last_generated_at' => fake()->dateTimeBetween('-7 days'),
+            'file_path' => '/reports/'.fake()->uuid().'.pdf',
+            'file_size' => fake()->numberBetween(512000, 5242880), // 512KB to 5MB
+            'error_message' => null,
+        ]);
+    }
+
+    /**
+     * Create a failed report
+     */
+    public function failed(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => 'failed',
+            'error_message' => fake()->randomElement([
+                'Failed to generate PDF',
+                'Database connection timeout',
+                'Insufficient data for report period',
+                'Template rendering error',
+                'Export limit exceeded',
+            ]),
+            'file_path' => null,
+            'file_size' => null,
+        ]);
+    }
+
+    /**
+     * Create an automated report
+     */
+    public function automated(): static
+    {
+        $frequency = fake()->randomElement(['daily', 'weekly', 'monthly']);
+
+        return $this->state(fn (array $attributes): array => [
+            'is_automated' => true,
+            'frequency' => $frequency,
+            'next_generation_at' => $this->calculateNextGeneration($frequency),
+        ]);
+    }
+
+    /**
+     * Create a manual report
+     */
+    public function manual(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_automated' => false,
+            'frequency' => 'manual',
+            'next_generation_at' => null,
+        ]);
+    }
+
+    /**
+     * Create a report that's due for generation
+     */
+    public function dueForGeneration(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_automated' => true,
+            'is_active' => true,
+            'frequency' => fake()->randomElement(['daily', 'weekly', 'monthly']),
+            'next_generation_at' => fake()->dateTimeBetween('-2 days', 'now'),
+        ]);
+    }
+
+    /**
+     * Create an inactive report
+     */
+    public function inactive(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_active' => false,
+        ]);
+    }
+
+    /**
+     * Create a report with specific type
+     */
+    public function withType(string $type): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'type' => $type,
+            'name' => $this->generateReportName($type),
+            'config' => $this->generateConfig($type),
+        ]);
+    }
+
+    /**
      * Generate report name based on type
      */
     private function generateReportName(string $type): string
@@ -57,7 +154,7 @@ class ReportFactory extends Factory
             'overview' => 'SEO Overview Report',
             'custom' => 'Custom SEO Report',
             default => 'SEO Report'
-        } . ' - ' . fake()->date('Y-m-d');
+        }.' - '.fake()->date('Y-m-d');
     }
 
     /**
@@ -103,7 +200,7 @@ class ReportFactory extends Factory
     /**
      * Calculate next generation time based on frequency
      */
-    private function calculateNextGeneration(string $frequency): ?\Carbon\Carbon
+    private function calculateNextGeneration(string $frequency): ?Carbon
     {
         return match ($frequency) {
             'daily' => now()->addDay(),
@@ -112,99 +209,5 @@ class ReportFactory extends Factory
             'quarterly' => now()->addMonths(3),
             default => null,
         };
-    }
-
-    /**
-     * Create a completed report
-     */
-    public function completed(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'status' => 'completed',
-            'last_generated_at' => fake()->dateTimeBetween('-7 days'),
-            'file_path' => '/reports/' . fake()->uuid() . '.pdf',
-            'file_size' => fake()->numberBetween(512000, 5242880), // 512KB to 5MB
-            'error_message' => null,
-        ]);
-    }
-
-    /**
-     * Create a failed report
-     */
-    public function failed(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'status' => 'failed',
-            'error_message' => fake()->randomElement([
-                'Failed to generate PDF',
-                'Database connection timeout',
-                'Insufficient data for report period',
-                'Template rendering error',
-                'Export limit exceeded',
-            ]),
-            'file_path' => null,
-            'file_size' => null,
-        ]);
-    }
-
-    /**
-     * Create an automated report
-     */
-    public function automated(): static
-    {
-        $frequency = fake()->randomElement(['daily', 'weekly', 'monthly']);
-        
-        return $this->state(fn (array $attributes) => [
-            'is_automated' => true,
-            'frequency' => $frequency,
-            'next_generation_at' => $this->calculateNextGeneration($frequency),
-        ]);
-    }
-
-    /**
-     * Create a manual report
-     */
-    public function manual(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'is_automated' => false,
-            'frequency' => 'manual',
-            'next_generation_at' => null,
-        ]);
-    }
-
-    /**
-     * Create a report that's due for generation
-     */
-    public function dueForGeneration(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'is_automated' => true,
-            'is_active' => true,
-            'frequency' => fake()->randomElement(['daily', 'weekly', 'monthly']),
-            'next_generation_at' => fake()->dateTimeBetween('-2 days', 'now'),
-        ]);
-    }
-
-    /**
-     * Create an inactive report
-     */
-    public function inactive(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'is_active' => false,
-        ]);
-    }
-
-    /**
-     * Create a report with specific type
-     */
-    public function withType(string $type): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'type' => $type,
-            'name' => $this->generateReportName($type),
-            'config' => $this->generateConfig($type),
-        ]);
     }
 }

@@ -1,29 +1,32 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
+use Exception;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
-use Exception;
 
-class SerpApiService
+final class SerpApiService
 {
     private string $apiKey;
+
     private string $baseUrl;
-    private array $rateLimits;
+
+    private array $rateLimits = [
+        'requests_per_second' => 5,
+        'requests_per_month' => 100000,
+        'timeout' => 30,
+    ];
+
     private string $cachePrefix = 'serp_api_';
 
     public function __construct()
     {
         $this->apiKey = config('services.serp.api_key', '');
         $this->baseUrl = config('services.serp.base_url', 'https://serpapi.com/search.json');
-        
-        $this->rateLimits = [
-            'requests_per_second' => 5,
-            'requests_per_month' => 100000,
-            'timeout' => 30,
-        ];
     }
 
     /**
@@ -40,9 +43,9 @@ class SerpApiService
             'gl' => 'us',
         ], $params);
 
-        $cacheKey = $this->cachePrefix . 'google_' . md5(serialize($searchParams));
-        
-        return Cache::remember($cacheKey, 3600, function () use ($searchParams) {
+        $cacheKey = $this->cachePrefix.'google_'.md5(serialize($searchParams));
+
+        return Cache::remember($cacheKey, 3600, function () use ($searchParams): array {
             return $this->makeRequest($searchParams);
         });
     }
@@ -59,9 +62,9 @@ class SerpApiService
             'count' => 50,
         ], $params);
 
-        $cacheKey = $this->cachePrefix . 'bing_' . md5(serialize($searchParams));
-        
-        return Cache::remember($cacheKey, 3600, function () use ($searchParams) {
+        $cacheKey = $this->cachePrefix.'bing_'.md5(serialize($searchParams));
+
+        return Cache::remember($cacheKey, 3600, function () use ($searchParams): array {
             return $this->makeRequest($searchParams);
         });
     }
@@ -81,9 +84,9 @@ class SerpApiService
             'type' => 'search',
         ], $params);
 
-        $cacheKey = $this->cachePrefix . 'local_' . md5(serialize($searchParams));
-        
-        return Cache::remember($cacheKey, 1800, function () use ($searchParams) {
+        $cacheKey = $this->cachePrefix.'local_'.md5(serialize($searchParams));
+
+        return Cache::remember($cacheKey, 1800, function () use ($searchParams): array {
             return $this->makeRequest($searchParams);
         });
     }
@@ -159,7 +162,7 @@ class SerpApiService
 
         foreach ($organicResults as $index => $result) {
             $resultDomain = $this->normalizeDomain($result['link'] ?? '');
-            
+
             if ($resultDomain === $targetDomain) {
                 return [
                     'position' => $index + 1,
@@ -189,7 +192,7 @@ class SerpApiService
             }
 
             $resultDomain = $this->normalizeDomain($result['link'] ?? '');
-            
+
             if ($resultDomain && $resultDomain !== $excludeDomain) {
                 $competitors[] = [
                     'position' => $index + 1,
@@ -273,12 +276,11 @@ class SerpApiService
     /**
      * Get search volume data (if available)
      */
-    public function getSearchVolumeData(string $keyword): ?array
+    public function getSearchVolumeData(): ?array
     {
         // SerpApi doesn't directly provide search volume
         // This would integrate with other services like Google Keyword Planner
         // or SEMrush API for search volume data
-        
         return null;
     }
 
@@ -293,125 +295,22 @@ class SerpApiService
         foreach ($keywords as $keyword) {
             try {
                 $results[$keyword] = $this->searchGoogle($keyword, $baseParams);
-                
+
                 // Rate limiting
                 if (count($keywords) > 1) {
                     usleep($delayBetweenRequests);
                 }
-                
+
             } catch (Exception $e) {
-                Log::error("Batch search failed for keyword: {$keyword}", [
-                    'error' => $e->getMessage()
+                Log::error('Batch search failed for keyword: '.$keyword, [
+                    'error' => $e->getMessage(),
                 ]);
-                
+
                 $results[$keyword] = ['error' => $e->getMessage()];
             }
         }
 
         return $results;
-    }
-
-    /**
-     * Make HTTP request to SERP API
-     */
-    private function makeRequest(array $params): array
-    {
-        if (empty($this->apiKey)) {
-            throw new Exception('SERP API key not configured');
-        }
-
-        try {
-            // Check rate limits
-            $this->checkRateLimit();
-
-            $response = Http::timeout($this->rateLimits['timeout'])
-                ->get($this->baseUrl, $params);
-
-            if (!$response->successful()) {
-                throw new Exception('SERP API request failed: ' . $response->status() . ' - ' . $response->body());
-            }
-
-            $data = $response->json();
-
-            if (isset($data['error'])) {
-                throw new Exception('SERP API error: ' . $data['error']);
-            }
-
-            // Track API usage
-            $this->trackApiUsage();
-
-            Log::info('SERP API request successful', [
-                'query' => $params['q'] ?? 'unknown',
-                'engine' => $params['engine'] ?? 'google',
-                'results_count' => count($data['organic_results'] ?? []),
-            ]);
-
-            return $data;
-
-        } catch (Exception $e) {
-            Log::error('SERP API request failed', [
-                'error' => $e->getMessage(),
-                'params' => $params,
-            ]);
-            
-            throw $e;
-        }
-    }
-
-    /**
-     * Check rate limits
-     */
-    private function checkRateLimit(): void
-    {
-        $usageKey = $this->cachePrefix . 'usage_' . now()->format('Y-m-d-H');
-        $currentUsage = Cache::get($usageKey, 0);
-
-        if ($currentUsage >= $this->rateLimits['requests_per_second'] * 3600) {
-            throw new Exception('SERP API rate limit exceeded for this hour');
-        }
-
-        // Check monthly limits
-        $monthlyUsageKey = $this->cachePrefix . 'monthly_usage_' . now()->format('Y-m');
-        $monthlyUsage = Cache::get($monthlyUsageKey, 0);
-
-        if ($monthlyUsage >= $this->rateLimits['requests_per_month']) {
-            throw new Exception('SERP API monthly rate limit exceeded');
-        }
-    }
-
-    /**
-     * Track API usage
-     */
-    private function trackApiUsage(): void
-    {
-        // Hourly tracking
-        $usageKey = $this->cachePrefix . 'usage_' . now()->format('Y-m-d-H');
-        $currentUsage = Cache::get($usageKey, 0);
-        Cache::put($usageKey, $currentUsage + 1, 3600);
-
-        // Monthly tracking
-        $monthlyUsageKey = $this->cachePrefix . 'monthly_usage_' . now()->format('Y-m');
-        $monthlyUsage = Cache::get($monthlyUsageKey, 0);
-        $monthlyTtl = now()->endOfMonth()->diffInSeconds(now());
-        Cache::put($monthlyUsageKey, $monthlyUsage + 1, $monthlyTtl);
-    }
-
-    /**
-     * Normalize domain for comparison
-     */
-    private function normalizeDomain(string $url): string
-    {
-        if (empty($url)) {
-            return '';
-        }
-
-        $domain = parse_url($url, PHP_URL_HOST);
-        if (!$domain) {
-            return '';
-        }
-
-        // Remove www prefix
-        return str_replace('www.', '', strtolower($domain));
     }
 
     /**
@@ -423,11 +322,11 @@ class SerpApiService
         $currentMonth = now()->format('Y-m');
 
         return [
-            'hourly_usage' => Cache::get($this->cachePrefix . 'usage_' . $currentHour, 0),
+            'hourly_usage' => Cache::get($this->cachePrefix.'usage_'.$currentHour, 0),
             'hourly_limit' => $this->rateLimits['requests_per_second'] * 3600,
-            'monthly_usage' => Cache::get($this->cachePrefix . 'monthly_usage_' . $currentMonth, 0),
+            'monthly_usage' => Cache::get($this->cachePrefix.'monthly_usage_'.$currentMonth, 0),
             'monthly_limit' => $this->rateLimits['requests_per_month'],
-            'last_request' => Cache::get($this->cachePrefix . 'last_request'),
+            'last_request' => Cache::get($this->cachePrefix.'last_request'),
             'rate_limits' => $this->rateLimits,
         ];
     }
@@ -446,18 +345,20 @@ class SerpApiService
             ];
 
             $response = Http::timeout(10)->get($this->baseUrl, $testParams);
-            
+
             if ($response->successful()) {
                 $data = $response->json();
-                return !isset($data['error']);
+
+                return ! isset($data['error']);
             }
 
             return false;
 
-        } catch (Exception $e) {
+        } catch (Exception $exception) {
             Log::error('SERP API connection test failed', [
-                'error' => $e->getMessage()
+                'error' => $exception->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -500,7 +401,7 @@ class SerpApiService
         // For now, return common locations
         return [
             'United States',
-            'United Kingdom', 
+            'United Kingdom',
             'Canada',
             'Australia',
             'Germany',
@@ -520,12 +421,12 @@ class SerpApiService
     /**
      * Clear cache for specific parameters
      */
-    public function clearCache(string $query = null, array $params = []): bool
+    public function clearCache(?string $query = null, array $params = []): bool
     {
         try {
             if ($query) {
                 $searchParams = array_merge(['q' => $query], $params);
-                $cacheKey = $this->cachePrefix . 'google_' . md5(serialize($searchParams));
+                $cacheKey = $this->cachePrefix.'google_'.md5(serialize($searchParams));
                 Cache::forget($cacheKey);
             } else {
                 // Clear all SERP API cache
@@ -535,11 +436,115 @@ class SerpApiService
 
             return true;
 
-        } catch (Exception $e) {
+        } catch (Exception $exception) {
             Log::error('Failed to clear SERP API cache', [
-                'error' => $e->getMessage()
+                'error' => $exception->getMessage(),
             ]);
+
             return false;
         }
+    }
+
+    /**
+     * Make HTTP request to SERP API
+     */
+    private function makeRequest(array $params): array
+    {
+        if ($this->apiKey === '' || $this->apiKey === '0') {
+            throw new Exception('SERP API key not configured');
+        }
+
+        try {
+            // Check rate limits
+            $this->checkRateLimit();
+
+            $response = Http::timeout($this->rateLimits['timeout'])
+                ->get($this->baseUrl, $params);
+
+            if (! $response->successful()) {
+                throw new Exception('SERP API request failed: '.$response->status().' - '.$response->body());
+            }
+
+            $data = $response->json();
+
+            if (isset($data['error'])) {
+                throw new Exception('SERP API error: '.$data['error']);
+            }
+
+            // Track API usage
+            $this->trackApiUsage();
+
+            Log::info('SERP API request successful', [
+                'query' => $params['q'] ?? 'unknown',
+                'engine' => $params['engine'] ?? 'google',
+                'results_count' => count($data['organic_results'] ?? []),
+            ]);
+
+            return $data;
+
+        } catch (Exception $exception) {
+            Log::error('SERP API request failed', [
+                'error' => $exception->getMessage(),
+                'params' => $params,
+            ]);
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * Check rate limits
+     */
+    private function checkRateLimit(): void
+    {
+        $usageKey = $this->cachePrefix.'usage_'.now()->format('Y-m-d-H');
+        $currentUsage = Cache::get($usageKey, 0);
+
+        if ($currentUsage >= $this->rateLimits['requests_per_second'] * 3600) {
+            throw new Exception('SERP API rate limit exceeded for this hour');
+        }
+
+        // Check monthly limits
+        $monthlyUsageKey = $this->cachePrefix.'monthly_usage_'.now()->format('Y-m');
+        $monthlyUsage = Cache::get($monthlyUsageKey, 0);
+
+        if ($monthlyUsage >= $this->rateLimits['requests_per_month']) {
+            throw new Exception('SERP API monthly rate limit exceeded');
+        }
+    }
+
+    /**
+     * Track API usage
+     */
+    private function trackApiUsage(): void
+    {
+        // Hourly tracking
+        $usageKey = $this->cachePrefix.'usage_'.now()->format('Y-m-d-H');
+        $currentUsage = Cache::get($usageKey, 0);
+        Cache::put($usageKey, $currentUsage + 1, 3600);
+
+        // Monthly tracking
+        $monthlyUsageKey = $this->cachePrefix.'monthly_usage_'.now()->format('Y-m');
+        $monthlyUsage = Cache::get($monthlyUsageKey, 0);
+        $monthlyTtl = now()->endOfMonth()->diffInSeconds(now());
+        Cache::put($monthlyUsageKey, $monthlyUsage + 1, $monthlyTtl);
+    }
+
+    /**
+     * Normalize domain for comparison
+     */
+    private function normalizeDomain(string $url): string
+    {
+        if ($url === '' || $url === '0') {
+            return '';
+        }
+
+        $domain = parse_url($url, PHP_URL_HOST);
+        if (! $domain) {
+            return '';
+        }
+
+        // Remove www prefix
+        return str_replace('www.', '', mb_strtolower($domain));
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -8,12 +10,14 @@ use App\Http\Resources\ReportResource;
 use App\Models\Project;
 use App\Models\Report;
 use App\Services\ReportingService;
+use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
-class ReportController extends Controller
+final class ReportController extends Controller
 {
     public function __construct(
         private ReportingService $reportingService
@@ -29,17 +33,17 @@ class ReportController extends Controller
     {
         $reports = $request->user()->tenant->reports()
             ->with(['project'])
-            ->when($request->project_id, function ($query, $projectId) {
+            ->when($request->project_id, function ($query, $projectId): void {
                 $query->where('project_id', $projectId);
             })
-            ->when($request->type, function ($query, $type) {
+            ->when($request->type, function ($query, $type): void {
                 $query->where('type', $type);
             })
-            ->when($request->status, function ($query, $status) {
+            ->when($request->status, function ($query, $status): void {
                 $query->where('status', $status);
             })
-            ->when($request->search, function ($query, $search) {
-                $query->where('title', 'ILIKE', "%{$search}%");
+            ->when($request->search, function ($query, $search): void {
+                $query->where('title', 'ILIKE', sprintf('%%%s%%', $search));
             })
             ->orderBy($request->sort ?? 'created_at', $request->direction ?? 'desc')
             ->paginate($request->per_page ?? 15);
@@ -52,20 +56,20 @@ class ReportController extends Controller
      */
     public function store(GenerateReportRequest $request): JsonResponse
     {
-        $project = Project::findOrFail($request->project_id);
+        $project = Project::query()->findOrFail($request->project_id);
         $this->authorize('view', $project);
 
         try {
             $report = $this->reportingService->generateReport($project, $request->validated());
-            
+
             return response()->json([
                 'message' => 'Report generation started',
                 'report' => new ReportResource($report),
             ], 202);
-        } catch (\Exception $e) {
+        } catch (Exception $exception) {
             return response()->json([
                 'message' => 'Failed to generate report',
-                'error' => $e->getMessage(),
+                'error' => $exception->getMessage(),
             ], 422);
         }
     }
@@ -90,10 +94,10 @@ class ReportController extends Controller
         $this->authorize('update', $report->project);
 
         $request->validate([
-            'title' => 'string|max:255',
-            'status' => 'in:draft,generating,completed,failed,scheduled',
-            'is_automated' => 'boolean',
-            'schedule' => 'array',
+            'title' => ['string', 'max:255'],
+            'status' => ['in:draft,generating,completed,failed,scheduled'],
+            'is_automated' => ['boolean'],
+            'schedule' => ['array'],
         ]);
 
         $report->update($request->only(['title', 'status', 'is_automated', 'schedule']));
@@ -120,22 +124,22 @@ class ReportController extends Controller
     /**
      * Download report in specified format
      */
-    public function download(Report $report, string $format = 'pdf'): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    public function download(Report $report, string $format = 'pdf'): BinaryFileResponse
     {
         $this->authorize('view', $report->project);
 
-        if (!in_array($format, ['pdf', 'html'])) {
+        if (! in_array($format, ['pdf', 'html'])) {
             abort(400, 'Invalid format. Supported formats: pdf, html');
         }
 
         $filePath = $this->reportingService->downloadReport($report, $format);
 
-        if (!$filePath || !file_exists($filePath)) {
+        if (! $filePath || ! file_exists($filePath)) {
             abort(404, 'Report file not found');
         }
 
-        $filename = "{$report->title}_{$report->id}.{$format}";
-        
+        $filename = sprintf('%s_%s.%s', $report->title, $report->id, $format);
+
         return response()->download($filePath, $filename);
     }
 
@@ -145,15 +149,15 @@ class ReportController extends Controller
     public function generateCustom(Request $request): JsonResponse
     {
         $request->validate([
-            'project_id' => 'required|exists:projects,id',
-            'template' => 'required|array',
-            'template.title' => 'required|string|max:255',
-            'template.sections' => 'required|array',
-            'template.sections.*.type' => 'required|in:keyword_performance,traffic_analysis,competitor_comparison,technical_seo',
-            'template.sections.*.config' => 'array',
+            'project_id' => ['required', 'exists:projects,id'],
+            'template' => ['required', 'array'],
+            'template.title' => ['required', 'string', 'max:255'],
+            'template.sections' => ['required', 'array'],
+            'template.sections.*.type' => ['required', 'in:keyword_performance,traffic_analysis,competitor_comparison,technical_seo'],
+            'template.sections.*.config' => ['array'],
         ]);
 
-        $project = Project::findOrFail($request->project_id);
+        $project = Project::query()->findOrFail($request->project_id);
         $this->authorize('view', $project);
 
         try {
@@ -162,15 +166,15 @@ class ReportController extends Controller
                 $request->template,
                 $request->options ?? []
             );
-            
+
             return response()->json([
                 'message' => 'Custom report generation started',
                 'report' => new ReportResource($report),
             ], 202);
-        } catch (\Exception $e) {
+        } catch (Exception $exception) {
             return response()->json([
                 'message' => 'Failed to generate custom report',
-                'error' => $e->getMessage(),
+                'error' => $exception->getMessage(),
             ], 422);
         }
     }
@@ -181,21 +185,21 @@ class ReportController extends Controller
     public function schedule(Request $request): JsonResponse
     {
         $request->validate([
-            'project_id' => 'required|exists:projects,id',
-            'title' => 'required|string|max:255',
-            'type' => 'required|in:daily,weekly,monthly,quarterly',
-            'frequency' => 'required|in:daily,weekly,monthly,quarterly',
-            'day_of_week' => 'required_if:frequency,weekly|in:monday,tuesday,wednesday,thursday,friday,saturday,sunday',
-            'day_of_month' => 'required_if:frequency,monthly|integer|min:1|max:31',
-            'recipients' => 'required|array',
-            'recipients.*' => 'email',
+            'project_id' => ['required', 'exists:projects,id'],
+            'title' => ['required', 'string', 'max:255'],
+            'type' => ['required', 'in:daily,weekly,monthly,quarterly'],
+            'frequency' => ['required', 'in:daily,weekly,monthly,quarterly'],
+            'day_of_week' => ['required_if:frequency,weekly', 'in:monday,tuesday,wednesday,thursday,friday,saturday,sunday'],
+            'day_of_month' => ['required_if:frequency,monthly', 'integer', 'min:1', 'max:31'],
+            'recipients' => ['required', 'array'],
+            'recipients.*' => ['email'],
         ]);
 
-        $project = Project::findOrFail($request->project_id);
+        $project = Project::query()->findOrFail($request->project_id);
         $this->authorize('update', $project);
 
         $schedule = $request->only([
-            'title', 'type', 'frequency', 'day_of_week', 'day_of_month', 'recipients'
+            'title', 'type', 'frequency', 'day_of_week', 'day_of_month', 'recipients',
         ]);
 
         $report = $this->reportingService->scheduleReport($project, $schedule);
@@ -273,7 +277,7 @@ class ReportController extends Controller
                 ->orderBy('completed_at', 'desc')
                 ->limit(5)
                 ->get()
-                ->map(function ($report) {
+                ->map(function ($report): array {
                     return [
                         'id' => $report->id,
                         'title' => $report->title,
@@ -300,21 +304,21 @@ class ReportController extends Controller
             $newReport = $this->reportingService->generateReport(
                 $report->project,
                 [
-                    'title' => $report->title . ' (Copy)',
+                    'title' => $report->title.' (Copy)',
                     'type' => $report->type,
                     'template_config' => $report->template_config,
                 ]
             );
-            
+
             return response()->json([
                 'message' => 'Report duplication started',
                 'original_report_id' => $report->id,
                 'new_report' => new ReportResource($newReport),
             ], 202);
-        } catch (\Exception $e) {
+        } catch (Exception $exception) {
             return response()->json([
                 'message' => 'Failed to duplicate report',
-                'error' => $e->getMessage(),
+                'error' => $exception->getMessage(),
             ], 422);
         }
     }
@@ -327,25 +331,25 @@ class ReportController extends Controller
         $this->authorize('view', $report->project);
 
         $request->validate([
-            'recipients' => 'required|array',
-            'recipients.*' => 'email',
-            'message' => 'nullable|string|max:1000',
-            'include_link' => 'boolean',
+            'recipients' => ['required', 'array'],
+            'recipients.*' => ['email'],
+            'message' => ['nullable', 'string', 'max:1000'],
+            'include_link' => ['boolean'],
         ]);
 
         try {
             // This would send the report via email
             // Implementation would depend on your mail service
-            
+
             return response()->json([
                 'message' => 'Report shared successfully',
                 'recipients' => $request->recipients,
                 'shared_at' => now(),
             ]);
-        } catch (\Exception $e) {
+        } catch (Exception $exception) {
             return response()->json([
                 'message' => 'Failed to share report',
-                'error' => $e->getMessage(),
+                'error' => $exception->getMessage(),
             ], 422);
         }
     }
@@ -377,7 +381,7 @@ class ReportController extends Controller
     {
         $this->authorize('update', $report->project);
 
-        if (!in_array($report->status, ['generating', 'scheduled'])) {
+        if (! in_array($report->status, ['generating', 'scheduled'])) {
             return response()->json([
                 'message' => 'Cannot cancel report in current status',
                 'current_status' => $report->status,
@@ -393,17 +397,41 @@ class ReportController extends Controller
     }
 
     /**
+     * Get report insights and recommendations
+     */
+    public function insights(Report $report): JsonResponse
+    {
+        $this->authorize('view', $report->project);
+
+        if ($report->status !== 'completed' || ! $report->data) {
+            return response()->json([
+                'message' => 'Report not completed or data not available',
+            ], 422);
+        }
+
+        $insights = [
+            'key_findings' => $this->extractKeyFindings($report->data),
+            'action_items' => $this->extractActionItems($report->data),
+            'performance_summary' => $this->extractPerformanceSummary($report->data),
+            'trend_analysis' => $this->extractTrendAnalysis($report->data),
+        ];
+
+        return response()->json($insights);
+    }
+
+    /**
      * Get file size for a report
      */
     private function getReportFileSize(Report $report): ?string
     {
-        if (!$report->file_paths || !isset($report->file_paths['pdf'])) {
+        if (! $report->file_paths || ! isset($report->file_paths['pdf'])) {
             return null;
         }
 
         $filePath = $report->file_paths['pdf'];
         if (Storage::disk('local')->exists($filePath)) {
             $bytes = Storage::disk('local')->size($filePath);
+
             return $this->formatFileSize($bytes);
         }
 
@@ -416,9 +444,9 @@ class ReportController extends Controller
     private function formatFileSize(int $bytes): string
     {
         $units = ['B', 'KB', 'MB', 'GB'];
-        $factor = floor((strlen($bytes) - 1) / 3);
-        
-        return sprintf("%.1f %s", $bytes / pow(1024, $factor), $units[$factor]);
+        $factor = floor((mb_strlen($bytes) - 1) / 3);
+
+        return sprintf('%.1f %s', $bytes / pow(1024, $factor), $units[$factor]);
     }
 
     /**
@@ -426,7 +454,7 @@ class ReportController extends Controller
      */
     private function calculateProgress(Report $report): int
     {
-        return match($report->status) {
+        return match ($report->status) {
             'generating' => rand(10, 90), // Simulate progress
             'completed' => 100,
             'failed' => 0,
@@ -445,7 +473,7 @@ class ReportController extends Controller
         }
 
         // Estimate based on project size and report type
-        $estimatedMinutes = match($report->type) {
+        $estimatedMinutes = match ($report->type) {
             'daily' => 2,
             'weekly' => 5,
             'monthly' => 10,
@@ -458,29 +486,6 @@ class ReportController extends Controller
     }
 
     /**
-     * Get report insights and recommendations
-     */
-    public function insights(Report $report): JsonResponse
-    {
-        $this->authorize('view', $report->project);
-
-        if ($report->status !== 'completed' || !$report->data) {
-            return response()->json([
-                'message' => 'Report not completed or data not available',
-            ], 422);
-        }
-
-        $insights = [
-            'key_findings' => $this->extractKeyFindings($report->data),
-            'action_items' => $this->extractActionItems($report->data),
-            'performance_summary' => $this->extractPerformanceSummary($report->data),
-            'trend_analysis' => $this->extractTrendAnalysis($report->data),
-        ];
-
-        return response()->json($insights);
-    }
-
-    /**
      * Extract key findings from report data
      */
     private function extractKeyFindings(array $data): array
@@ -489,24 +494,24 @@ class ReportController extends Controller
 
         if (isset($data['summary'])) {
             $summary = $data['summary'];
-            
+
             // Traffic findings
             if ($summary['organic_traffic'] > 10000) {
                 $findings[] = [
                     'type' => 'positive',
                     'category' => 'traffic',
                     'title' => 'Strong Organic Traffic',
-                    'description' => 'Generated ' . number_format($summary['organic_traffic']) . ' organic clicks this period.',
+                    'description' => 'Generated '.number_format($summary['organic_traffic']).' organic clicks this period.',
                 ];
             }
-            
+
             // Position findings
             if ($summary['top_10_keywords'] > 20) {
                 $findings[] = [
                     'type' => 'positive',
                     'category' => 'rankings',
                     'title' => 'Good Keyword Coverage',
-                    'description' => $summary['top_10_keywords'] . ' keywords ranking in top 10 positions.',
+                    'description' => $summary['top_10_keywords'].' keywords ranking in top 10 positions.',
                 ];
             }
         }
@@ -540,7 +545,7 @@ class ReportController extends Controller
         if (isset($data['keywords'])) {
             $improving = 0;
             $declining = 0;
-            
+
             foreach ($data['keywords'] as $keyword) {
                 if (isset($keyword['trends']['trend'])) {
                     if ($keyword['trends']['trend'] === 'improving') {
@@ -550,7 +555,7 @@ class ReportController extends Controller
                     }
                 }
             }
-            
+
             $trends['keyword_trends'] = [
                 'improving' => $improving,
                 'declining' => $declining,

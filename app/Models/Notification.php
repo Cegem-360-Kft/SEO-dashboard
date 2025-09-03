@@ -1,15 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Notification extends Model
+final class Notification extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant;
+    use HasFactory;
 
     protected $fillable = [
         'tenant_id',
@@ -54,51 +58,10 @@ class Notification extends Model
         return $this->belongsTo(Keyword::class);
     }
 
-    // Scopes
-    public function scopeUnread($query)
-    {
-        return $query->where('is_read', false);
-    }
-
-    public function scopeRead($query)
-    {
-        return $query->where('is_read', true);
-    }
-
-    public function scopeUnsent($query)
-    {
-        return $query->where('is_sent', false);
-    }
-
-    public function scopeBySeverity($query, string $severity)
-    {
-        return $query->where('severity', $severity);
-    }
-
-    public function scopeByType($query, string $type)
-    {
-        return $query->where('type', $type);
-    }
-
-    public function scopeByChannel($query, string $channel)
-    {
-        return $query->where('channel', $channel);
-    }
-
-    public function scopeCritical($query)
-    {
-        return $query->where('severity', 'critical');
-    }
-
-    public function scopeRecent($query, int $hours = 24)
-    {
-        return $query->where('created_at', '>=', now()->subHours($hours));
-    }
-
     // Notification management methods
     public function markAsRead(): void
     {
-        if (!$this->is_read) {
+        if (! $this->is_read) {
             $this->update([
                 'is_read' => true,
                 'read_at' => now(),
@@ -156,12 +119,61 @@ class Notification extends Model
 
     public function shouldSendEmail(): bool
     {
-        return in_array($this->channel, ['email']) && 
+        return $this->channel === 'email' &&
                in_array($this->severity, ['critical', 'high']);
     }
 
     public function shouldSendPush(): bool
     {
         return in_array($this->channel, ['push', 'in_app']);
+    }
+
+    // Scopes
+    #[Scope]
+    protected function unread($query)
+    {
+        return $query->where('is_read', false);
+    }
+
+    #[Scope]
+    protected function read($query)
+    {
+        return $query->where('is_read', true);
+    }
+
+    #[Scope]
+    protected function unsent($query)
+    {
+        return $query->where('is_sent', false);
+    }
+
+    #[Scope]
+    protected function bySeverity($query, string $severity)
+    {
+        return $query->where('severity', $severity);
+    }
+
+    #[Scope]
+    protected function byType($query, string $type)
+    {
+        return $query->where('type', $type);
+    }
+
+    #[Scope]
+    protected function byChannel($query, string $channel)
+    {
+        return $query->where('channel', $channel);
+    }
+
+    #[Scope]
+    protected function critical($query)
+    {
+        return $query->where('severity', 'critical');
+    }
+
+    #[Scope]
+    protected function recent($query, int $hours = 24)
+    {
+        return $query->where('created_at', '>=', now()->subHours($hours));
     }
 }

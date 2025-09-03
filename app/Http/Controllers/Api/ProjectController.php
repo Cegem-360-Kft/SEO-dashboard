@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -9,11 +11,12 @@ use App\Http\Resources\ProjectResource;
 use App\Models\Project;
 use App\Services\AnalyticsService;
 use App\Services\SEOCalculationService;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
-class ProjectController extends Controller
+final class ProjectController extends Controller
 {
     public function __construct(
         private AnalyticsService $analyticsService,
@@ -30,11 +33,11 @@ class ProjectController extends Controller
     {
         $projects = $request->user()->tenant->projects()
             ->with(['keywords', 'competitors'])
-            ->when($request->search, function ($query, $search) {
-                $query->where('name', 'ILIKE', "%{$search}%")
-                      ->orWhere('domain', 'ILIKE', "%{$search}%");
+            ->when($request->search, function ($query, $search): void {
+                $query->where('name', 'ILIKE', sprintf('%%%s%%', $search))
+                    ->orWhere('domain', 'ILIKE', sprintf('%%%s%%', $search));
             })
-            ->when($request->status, function ($query, $status) {
+            ->when($request->status, function ($query, $status): void {
                 $query->where('status', $status);
             })
             ->orderBy($request->sort ?? 'created_at', $request->direction ?? 'desc')
@@ -73,17 +76,17 @@ class ProjectController extends Controller
     public function show(Project $project): ProjectResource
     {
         $this->authorize('view', $project);
-        
+
         $project->load([
-            'keywords' => function($query) {
-                $query->with(['positions' => function($q) {
+            'keywords' => function ($query): void {
+                $query->with(['positions' => function ($q): void {
                     $q->orderBy('tracked_at', 'desc')->limit(30);
                 }]);
             },
             'competitors.keywordPositions',
-            'reports' => function($query) {
+            'reports' => function ($query): void {
                 $query->orderBy('created_at', 'desc')->limit(5);
-            }
+            },
         ]);
 
         return new ProjectResource($project);
@@ -124,11 +127,11 @@ class ProjectController extends Controller
         $metrics = $this->analyticsService->calculateSeoMetrics($project);
         $visibility = $this->seoCalculationService->calculateVisibilityScore($project);
         $trafficPotential = $this->seoCalculationService->calculateTrafficPotential($project);
-        
+
         $recentPositions = $project->keywords()
-            ->with(['positions' => function($query) {
+            ->with(['positions' => function ($query): void {
                 $query->where('tracked_at', '>=', now()->subDays(7))
-                      ->orderBy('tracked_at', 'desc');
+                    ->orderBy('tracked_at', 'desc');
             }])
             ->where('is_active', true)
             ->get();
@@ -146,7 +149,7 @@ class ProjectController extends Controller
             ],
             'charts' => [
                 'position_trends' => $this->getPositionTrendsChart($project),
-                'visibility_history' => $this->getVisibilityHistory($project),
+                'visibility_history' => $this->getVisibilityHistory(),
             ],
         ];
 
@@ -164,7 +167,7 @@ class ProjectController extends Controller
         $endDate = $request->end_date ?? now()->format('Y-m-d');
 
         $analytics = [];
-        
+
         // Get Search Console data if configured
         if ($project->gsc_property_url) {
             $analytics['search_console'] = $this->analyticsService->getSearchConsoleData($project, [
@@ -172,7 +175,7 @@ class ProjectController extends Controller
                 'end_date' => $endDate,
             ]);
         }
-        
+
         // Get Analytics data if configured
         if ($project->ga4_property_id) {
             $analytics['google_analytics'] = $this->analyticsService->getAnalyticsData($project, [
@@ -180,7 +183,7 @@ class ProjectController extends Controller
                 'end_date' => $endDate,
             ]);
         }
-        
+
         // Get organic keyword traffic
         $analytics['keyword_traffic'] = $this->analyticsService->getOrganicTrafficForKeywords($project);
 
@@ -193,9 +196,9 @@ class ProjectController extends Controller
     public function bulkUpdate(Request $request): JsonResponse
     {
         $request->validate([
-            'project_ids' => 'required|array',
-            'project_ids.*' => 'exists:projects,id',
-            'updates' => 'required|array',
+            'project_ids' => ['required', 'array'],
+            'project_ids.*' => ['exists:projects,id'],
+            'updates' => ['required', 'array'],
         ]);
 
         $projects = $request->user()->tenant->projects()
@@ -211,7 +214,7 @@ class ProjectController extends Controller
         }
 
         return response()->json([
-            'message' => "Updated {$updated} projects successfully",
+            'message' => sprintf('Updated %d projects successfully', $updated),
             'updated_count' => $updated,
         ]);
     }
@@ -225,11 +228,12 @@ class ProjectController extends Controller
 
         $isArchived = $project->status === 'archived';
         $project->update([
-            'status' => $isArchived ? 'active' : 'archived'
+            'status' => $isArchived ? 'active' : 'archived',
         ]);
 
         $action = $isArchived ? 'restored' : 'archived';
-        return response()->json(['message' => "Project {$action} successfully"]);
+
+        return response()->json(['message' => sprintf('Project %s successfully', $action)]);
     }
 
     /**
@@ -240,15 +244,15 @@ class ProjectController extends Controller
         $this->authorize('view', $project);
 
         $competitors = $project->competitors()
-            ->with(['keywordPositions' => function($query) {
+            ->with(['keywordPositions' => function ($query): void {
                 $query->orderBy('tracked_at', 'desc')->limit(10);
             }])
             ->get();
 
-        $competitorData = $competitors->map(function($competitor) {
+        $competitorData = $competitors->map(function ($competitor): array {
             $averagePosition = $competitor->keywordPositions->avg('position');
             $totalKeywords = $competitor->keywordPositions->count();
-            
+
             return [
                 'id' => $competitor->id,
                 'name' => $competitor->name,
@@ -269,15 +273,15 @@ class ProjectController extends Controller
     private function getRecentPositionChanges($keywords): array
     {
         $changes = [];
-        
+
         foreach ($keywords as $keyword) {
             if ($keyword->positions->count() >= 2) {
                 $latest = $keyword->positions->first();
                 $previous = $keyword->positions->skip(1)->first();
-                
+
                 if ($latest->position && $previous->position) {
                     $change = $previous->position - $latest->position;
-                    
+
                     if (abs($change) >= 3) {
                         $changes[] = [
                             'keyword' => $keyword->term,
@@ -301,21 +305,21 @@ class ProjectController extends Controller
     private function getNewRankings(Project $project): array
     {
         return $project->keywords()
-            ->whereHas('positions', function($query) {
+            ->whereHas('positions', function ($query): void {
                 $query->where('tracked_at', '>=', now()->subDays(7))
-                      ->whereNotNull('position')
-                      ->where('position', '<=', 100);
+                    ->whereNotNull('position')
+                    ->where('position', '<=', 100);
             })
-            ->whereDoesntHave('positions', function($query) {
+            ->whereDoesntHave('positions', function ($query): void {
                 $query->where('tracked_at', '<', now()->subDays(7))
-                      ->whereNotNull('position');
+                    ->whereNotNull('position');
             })
-            ->with(['positions' => function($query) {
+            ->with(['positions' => function ($query): void {
                 $query->orderBy('tracked_at', 'desc')->limit(1);
             }])
             ->limit(10)
             ->get()
-            ->map(function($keyword) {
+            ->map(function ($keyword): array {
                 return [
                     'keyword' => $keyword->term,
                     'position' => $keyword->positions->first()->position,
@@ -331,25 +335,25 @@ class ProjectController extends Controller
     private function getLostRankings(Project $project): array
     {
         return $project->keywords()
-            ->whereHas('positions', function($query) {
+            ->whereHas('positions', function ($query): void {
                 $query->where('tracked_at', '<', now()->subDays(7))
-                      ->whereNotNull('position')
-                      ->where('position', '<=', 100);
+                    ->whereNotNull('position')
+                    ->where('position', '<=', 100);
             })
-            ->whereDoesntHave('positions', function($query) {
+            ->whereDoesntHave('positions', function ($query): void {
                 $query->where('tracked_at', '>=', now()->subDays(7))
-                      ->whereNotNull('position')
-                      ->where('position', '<=', 100);
+                    ->whereNotNull('position')
+                    ->where('position', '<=', 100);
             })
             ->limit(10)
             ->get()
-            ->map(function($keyword) {
+            ->map(function ($keyword): array {
                 $lastPosition = $keyword->positions()
                     ->where('tracked_at', '<', now()->subDays(7))
                     ->whereNotNull('position')
                     ->orderBy('tracked_at', 'desc')
                     ->first();
-                
+
                 return [
                     'keyword' => $keyword->term,
                     'last_position' => $lastPosition->position ?? null,
@@ -365,9 +369,9 @@ class ProjectController extends Controller
     private function getPositionTrendsChart(Project $project): array
     {
         $positions = $project->keywords()
-            ->with(['positions' => function($query) {
+            ->with(['positions' => function ($query): void {
                 $query->where('tracked_at', '>=', now()->subDays(30))
-                      ->orderBy('tracked_at', 'asc');
+                    ->orderBy('tracked_at', 'asc');
             }])
             ->where('is_active', true)
             ->get();
@@ -379,11 +383,11 @@ class ProjectController extends Controller
             foreach ($keyword->positions as $position) {
                 $date = $position->tracked_at->format('Y-m-d');
                 $dates[] = $date;
-                
-                if (!isset($chartData[$date])) {
+
+                if (! isset($chartData[$date])) {
                     $chartData[$date] = ['date' => $date, 'positions' => []];
                 }
-                
+
                 $chartData[$date]['positions'][] = $position->position;
             }
         }
@@ -391,10 +395,10 @@ class ProjectController extends Controller
         // Calculate average position per day
         $result = [];
         foreach ($chartData as $data) {
-            $avgPosition = count($data['positions']) > 0 
-                ? array_sum($data['positions']) / count($data['positions']) 
+            $avgPosition = $data['positions'] !== []
+                ? array_sum($data['positions']) / count($data['positions'])
                 : 0;
-            
+
             $result[] = [
                 'date' => $data['date'],
                 'average_position' => round($avgPosition, 2),
@@ -408,7 +412,7 @@ class ProjectController extends Controller
     /**
      * Get visibility history
      */
-    private function getVisibilityHistory(Project $project): array
+    private function getVisibilityHistory(): array
     {
         // This would be more complex in a real implementation
         // tracking visibility score over time
@@ -418,7 +422,7 @@ class ProjectController extends Controller
     /**
      * Calculate competitor trend
      */
-    private function calculateCompetitorTrend($competitor): string
+    private function calculateCompetitorTrend(Model $competitor): string
     {
         $recentPositions = $competitor->keywordPositions()
             ->where('tracked_at', '>=', now()->subWeeks(2))
@@ -437,7 +441,9 @@ class ProjectController extends Controller
 
         if ($recentAvg < $olderAvg - 2) {
             return 'improving';
-        } elseif ($recentAvg > $olderAvg + 2) {
+        }
+
+        if ($recentAvg > $olderAvg + 2) {
             return 'declining';
         }
 

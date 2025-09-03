@@ -1,15 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class KeywordPosition extends Model
+final class KeywordPosition extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant;
+    use HasFactory;
 
     protected $fillable = [
         'tenant_id',
@@ -47,64 +51,28 @@ class KeywordPosition extends Model
         return $this->belongsTo(Keyword::class);
     }
 
-    // Scopes
-    public function scopeForDate($query, $date)
-    {
-        return $query->where('date', $date);
-    }
-
-    public function scopeForSearchEngine($query, string $engine)
-    {
-        return $query->where('search_engine', $engine);
-    }
-
-    public function scopeForDevice($query, string $device)
-    {
-        return $query->where('device', $device);
-    }
-
-    public function scopeInTop10($query)
-    {
-        return $query->whereBetween('position', [1, 10]);
-    }
-
-    public function scopeWithFeaturedSnippet($query)
-    {
-        return $query->where('is_featured_snippet', true);
-    }
-
-    public function scopeWithLocalPack($query)
-    {
-        return $query->where('is_local_pack', true);
-    }
-
-    public function scopeForDateRange($query, $startDate, $endDate)
-    {
-        return $query->whereBetween('date', [$startDate, $endDate]);
-    }
-
     // Analytics methods
-    public function hasImproved(?KeywordPosition $previous = null): bool
+    public function hasImproved(?self $previous = null): bool
     {
-        if (!$previous) {
+        if (! $previous instanceof self) {
             return false;
         }
 
         return $this->position < $previous->position;
     }
 
-    public function hasDeclined(?KeywordPosition $previous = null): bool
+    public function hasDeclined(?self $previous = null): bool
     {
-        if (!$previous) {
+        if (! $previous instanceof self) {
             return false;
         }
 
         return $this->position > $previous->position;
     }
 
-    public function getPositionChange(?KeywordPosition $previous = null): int
+    public function getPositionChange(?self $previous = null): int
     {
-        if (!$previous) {
+        if (! $previous instanceof self) {
             return 0;
         }
 
@@ -118,7 +86,7 @@ class KeywordPosition extends Model
 
     public function getVisibilityScore(): float
     {
-        if (!$this->position) {
+        if (! $this->position) {
             return 0.0;
         }
 
@@ -132,14 +100,14 @@ class KeywordPosition extends Model
 
     public function getCtrEstimate(): float
     {
-        if (!$this->position) {
+        if (! $this->position) {
             return 0.0;
         }
 
         // Industry-standard CTR curve
         $ctrCurve = [
             1 => 31.49, 2 => 15.55, 3 => 10.06, 4 => 6.97, 5 => 5.13,
-            6 => 4.03, 7 => 3.29, 8 => 2.76, 9 => 2.38, 10 => 2.08
+            6 => 4.03, 7 => 3.29, 8 => 2.76, 9 => 2.38, 10 => 2.08,
         ];
 
         return $ctrCurve[$this->position] ?? 1.0;
@@ -147,8 +115,51 @@ class KeywordPosition extends Model
 
     public function hasSpecialFeature(): bool
     {
-        return $this->is_featured_snippet || 
-               $this->is_local_pack || 
-               !empty($this->serp_features);
+        return $this->is_featured_snippet ||
+               $this->is_local_pack ||
+               ! empty($this->serp_features);
+    }
+
+    // Scopes
+    #[Scope]
+    protected function forDate($query, $date)
+    {
+        return $query->where('date', $date);
+    }
+
+    #[Scope]
+    protected function forSearchEngine($query, string $engine)
+    {
+        return $query->where('search_engine', $engine);
+    }
+
+    #[Scope]
+    protected function forDevice($query, string $device)
+    {
+        return $query->where('device', $device);
+    }
+
+    #[Scope]
+    protected function inTop10($query)
+    {
+        return $query->whereBetween('position', [1, 10]);
+    }
+
+    #[Scope]
+    protected function withFeaturedSnippet($query)
+    {
+        return $query->where('is_featured_snippet', true);
+    }
+
+    #[Scope]
+    protected function withLocalPack($query)
+    {
+        return $query->where('is_local_pack', true);
+    }
+
+    #[Scope]
+    protected function forDateRange($query, $startDate, $endDate)
+    {
+        return $query->whereBetween('date', [$startDate, $endDate]);
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -11,7 +13,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('reports', function (Blueprint $table) {
+        Schema::create('reports', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
             $table->foreignId('project_id')->constrained()->cascadeOnDelete();
@@ -35,7 +37,7 @@ return new class extends Migration
             $table->text('error_message')->nullable();
             $table->timestamps();
             $table->softDeletes();
-            
+
             $table->index(['tenant_id', 'project_id', 'is_active']);
             $table->index(['tenant_id', 'is_automated', 'next_generation_at']);
             $table->index(['status', 'next_generation_at']);

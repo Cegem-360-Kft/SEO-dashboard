@@ -1,42 +1,42 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Admin\Widgets;
 
 use App\Models\Keyword;
-use App\Models\Project;
 use Filament\Widgets\ChartWidget;
-use Illuminate\Support\Facades\DB;
 
-class PerformanceStatsWidget extends ChartWidget
+final class PerformanceStatsWidget extends ChartWidget
 {
     protected static ?string $heading = 'Keyword Distribution by Position';
 
     protected static ?int $sort = 3;
 
-    protected int | string | array $columnSpan = 1;
+    protected int|string|array $columnSpan = 1;
 
     protected function getData(): array
     {
         $tenantId = auth()->user()->tenant_id;
-        
+
         // Get position distribution
         $positions = [
-            'Top 3 (1-3)' => Keyword::where('tenant_id', $tenantId)
+            'Top 3 (1-3)' => Keyword::query()->where('tenant_id', $tenantId)
                 ->whereBetween('current_position', [1, 3])
                 ->count(),
-            'Top 10 (4-10)' => Keyword::where('tenant_id', $tenantId)
+            'Top 10 (4-10)' => Keyword::query()->where('tenant_id', $tenantId)
                 ->whereBetween('current_position', [4, 10])
                 ->count(),
-            'Top 20 (11-20)' => Keyword::where('tenant_id', $tenantId)
+            'Top 20 (11-20)' => Keyword::query()->where('tenant_id', $tenantId)
                 ->whereBetween('current_position', [11, 20])
                 ->count(),
-            'Top 50 (21-50)' => Keyword::where('tenant_id', $tenantId)
+            'Top 50 (21-50)' => Keyword::query()->where('tenant_id', $tenantId)
                 ->whereBetween('current_position', [21, 50])
                 ->count(),
-            'Beyond 50' => Keyword::where('tenant_id', $tenantId)
+            'Beyond 50' => Keyword::query()->where('tenant_id', $tenantId)
                 ->where('current_position', '>', 50)
                 ->count(),
-            'Not Ranked' => Keyword::where('tenant_id', $tenantId)
+            'Not Ranked' => Keyword::query()->where('tenant_id', $tenantId)
                 ->whereNull('current_position')
                 ->count(),
         ];

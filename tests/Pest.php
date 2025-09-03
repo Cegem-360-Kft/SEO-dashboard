@@ -1,8 +1,11 @@
 <?php
 
-use App\Models\User;
+declare(strict_types=1);
+
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,11 +18,11 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 |
 */
 
-pest()->extend(Tests\TestCase::class)
+pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature', 'Integration', 'Performance');
 
-pest()->extend(Tests\TestCase::class)
+pest()->extend(TestCase::class)
     ->in('Unit');
 
 /*
@@ -78,9 +81,9 @@ function actingAsTenantUser(?User $user = null, ?Tenant $tenant = null): User
 {
     $tenant = $tenant ?? createTenant();
     $user = $user ?? User::factory()->for($tenant)->create();
-    
+
     test()->actingAs($user);
-    
+
     return $user;
 }
 
@@ -88,9 +91,9 @@ function createAuthenticatedUser(array $userAttributes = [], array $tenantAttrib
 {
     $tenant = createTenant($tenantAttributes);
     $user = User::factory()->for($tenant)->create($userAttributes);
-    
+
     test()->actingAs($user);
-    
+
     return [$user, $tenant];
 }
 

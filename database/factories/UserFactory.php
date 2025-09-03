@@ -1,15 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
+ * @extends Factory<User>
  */
-class UserFactory extends Factory
+final class UserFactory extends Factory
 {
     /**
      * The current password being used by the factory.
@@ -24,11 +27,10 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
-            'tenant_id' => \App\Models\Tenant::factory(),
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
-            'password' => static::$password ??= Hash::make('password'),
+            'password' => self::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
             'phone' => fake()->phoneNumber(),
             'preferences' => [
@@ -50,7 +52,7 @@ class UserFactory extends Factory
      */
     public function unverified(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'email_verified_at' => null,
         ]);
     }
@@ -60,7 +62,7 @@ class UserFactory extends Factory
      */
     public function admin(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'role' => 'admin',
             'permissions' => ['manage_users', 'manage_projects', 'view_reports'],
         ]);
@@ -71,7 +73,7 @@ class UserFactory extends Factory
      */
     public function owner(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'role' => 'owner',
             'permissions' => ['*'],
         ]);
@@ -82,7 +84,7 @@ class UserFactory extends Factory
      */
     public function inactive(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'is_active' => false,
         ]);
     }
@@ -92,7 +94,7 @@ class UserFactory extends Factory
      */
     public function withRole(string $role): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'role' => $role,
         ]);
     }

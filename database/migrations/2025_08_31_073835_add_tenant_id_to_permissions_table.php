@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -17,13 +19,13 @@ return new class extends Migration
 
         if ($teams) {
             // Add tenant_id to permissions table
-            Schema::table($tableNames['permissions'], function (Blueprint $table) use ($columnNames) {
+            Schema::table($tableNames['permissions'], function (Blueprint $table) use ($columnNames): void {
                 $table->unsignedBigInteger($columnNames['team_foreign_key'])->nullable()->after('guard_name');
                 $table->index($columnNames['team_foreign_key'], 'permissions_team_foreign_key_index');
             });
 
             // Update unique constraint to include tenant_id
-            Schema::table($tableNames['permissions'], function (Blueprint $table) use ($columnNames) {
+            Schema::table($tableNames['permissions'], function (Blueprint $table) use ($columnNames): void {
                 $table->dropUnique(['name', 'guard_name']);
                 $table->unique([$columnNames['team_foreign_key'], 'name', 'guard_name']);
             });
@@ -40,13 +42,13 @@ return new class extends Migration
         $teams = config('permission.teams');
 
         if ($teams) {
-            Schema::table($tableNames['permissions'], function (Blueprint $table) use ($columnNames) {
+            Schema::table($tableNames['permissions'], function (Blueprint $table) use ($columnNames): void {
                 $table->dropIndex('permissions_team_foreign_key_index');
                 $table->dropColumn($columnNames['team_foreign_key']);
             });
 
             // Restore original unique constraint
-            Schema::table($tableNames['permissions'], function (Blueprint $table) {
+            Schema::table($tableNames['permissions'], function (Blueprint $table): void {
                 $table->unique(['name', 'guard_name']);
             });
         }

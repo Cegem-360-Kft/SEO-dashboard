@@ -1,19 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
-use App\Models\User;
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 
-class TenantAuthController extends Controller
+final class TenantAuthController extends Controller
 {
     /**
      * Handle tenant-aware login
@@ -23,9 +24,9 @@ class TenantAuthController extends Controller
         $this->ensureIsNotRateLimited($request);
 
         $request->validate([
-            'email' => 'required|email',
-            'password' => 'required|string',
-            'tenant_identifier' => 'nullable|string', // slug or domain
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string'],
+            'tenant_identifier' => ['nullable', 'string'], // slug or domain
         ]);
 
         $email = $request->email;
@@ -33,9 +34,9 @@ class TenantAuthController extends Controller
         $tenantIdentifier = $request->tenant_identifier;
 
         // Find user by email first
-        $user = User::where('email', $email)->first();
+        $user = User::query()->where('email', $email)->first();
 
-        if (!$user || !Hash::check($password, $user->password)) {
+        if (! $user || ! Hash::check($password, $user->password)) {
             RateLimiter::hit($this->throttleKey($request));
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
@@ -44,11 +45,11 @@ class TenantAuthController extends Controller
 
         // If tenant identifier is provided, validate it matches user's tenant
         if ($tenantIdentifier) {
-            $tenant = Tenant::where('slug', $tenantIdentifier)
-                           ->orWhere('domain', $tenantIdentifier)
-                           ->first();
+            $tenant = Tenant::query()->where('slug', $tenantIdentifier)
+                ->orWhere('domain', $tenantIdentifier)
+                ->first();
 
-            if (!$tenant || $user->tenant_id !== $tenant->id) {
+            if (! $tenant || $user->tenant_id !== $tenant->id) {
                 RateLimiter::hit($this->throttleKey($request));
                 throw ValidationException::withMessages([
                     'tenant_identifier' => ['Invalid tenant for this user.'],
@@ -57,13 +58,13 @@ class TenantAuthController extends Controller
         }
 
         // Validate tenant and user status
-        if (!$user->tenant || !$user->tenant->is_active) {
+        if (! $user->tenant || ! $user->tenant->is_active) {
             throw ValidationException::withMessages([
                 'email' => ['Your tenant account is inactive.'],
             ]);
         }
 
-        if (!$user->is_active) {
+        if (! $user->is_active) {
             throw ValidationException::withMessages([
                 'email' => ['Your user account is deactivated.'],
             ]);
@@ -72,7 +73,7 @@ class TenantAuthController extends Controller
         RateLimiter::clear($this->throttleKey($request));
 
         Auth::login($user, $request->boolean('remember'));
-        
+
         // Record login and audit log
         $user->recordLogin();
         AuditLog::logAuthEvent('user.login', $user, [
@@ -85,7 +86,7 @@ class TenantAuthController extends Controller
         return response()->json([
             'message' => 'Login successful',
             'user' => $user->load('tenant'),
-            'redirect_url' => route('dashboard')
+            'redirect_url' => route('dashboard'),
         ]);
     }
 
@@ -95,7 +96,7 @@ class TenantAuthController extends Controller
     public function logout(Request $request)
     {
         $user = Auth::user();
-        
+
         // Log logout event before actual logout
         if ($user) {
             AuditLog::logAuthEvent('user.logout', $user);
@@ -115,8 +116,8 @@ class TenantAuthController extends Controller
     public function createApiToken(Request $request)
     {
         $request->validate([
-            'token_name' => 'required|string|max:255',
-            'abilities' => 'sometimes|array',
+            'token_name' => ['required', 'string', 'max:255'],
+            'abilities' => ['sometimes', 'array'],
         ]);
 
         $user = $request->user();
@@ -142,13 +143,13 @@ class TenantAuthController extends Controller
     public function revokeApiToken(Request $request)
     {
         $request->validate([
-            'token_id' => 'required|integer',
+            'token_id' => ['required', 'integer'],
         ]);
 
         $user = $request->user();
         $token = $user->tokens()->where('id', $request->token_id)->first();
 
-        if (!$token) {
+        if (! $token) {
             return response()->json(['message' => 'Token not found'], 404);
         }
 
@@ -163,7 +164,7 @@ class TenantAuthController extends Controller
     public function getApiTokens(Request $request)
     {
         $user = $request->user();
-        
+
         $tokens = $user->tokens()->select('id', 'name', 'abilities', 'last_used_at', 'expires_at', 'created_at')->get();
 
         return response()->json(['tokens' => $tokens]);
@@ -174,7 +175,7 @@ class TenantAuthController extends Controller
      */
     protected function throttleKey(Request $request): string
     {
-        return strtolower($request->input('email')).'|'.$request->ip();
+        return mb_strtolower($request->input('email')).'|'.$request->ip();
     }
 
     /**

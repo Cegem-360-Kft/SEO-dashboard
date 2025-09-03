@@ -1,27 +1,28 @@
 <?php
 
-use App\Models\User;
-use App\Models\Tenant;
-use App\Models\Project;
+declare(strict_types=1);
+
+use App\Models\Competitor;
 use App\Models\Keyword;
 use App\Models\KeywordPosition;
-use App\Models\Competitor;
-use Illuminate\Http\Response;
+use App\Models\Project;
+use App\Models\Tenant;
+use App\Models\User;
 
-describe('Project API Controller', function () {
-    let('tenant', fn() => Tenant::factory()->create());
-    let('user', fn() => User::factory()->for($this->tenant)->create());
-    let('otherTenant', fn() => Tenant::factory()->create());
-    let('otherUser', fn() => User::factory()->for($this->otherTenant)->create());
+describe('Project API Controller', function (): void {
+    let('tenant', fn () => Tenant::factory()->create());
+    let('user', fn () => User::factory()->for($this->tenant)->create());
+    let('otherTenant', fn () => Tenant::factory()->create());
+    let('otherUser', fn () => User::factory()->for($this->otherTenant)->create());
 
-    beforeEach(function () {
+    beforeEach(function (): void {
         mockExternalApis();
     });
 
-    describe('GET /api/projects', function () {
-        it('returns authenticated user projects', function () {
+    describe('GET /api/projects', function (): void {
+        it('returns authenticated user projects', function (): void {
             $projects = Project::factory()->count(3)->for($this->tenant)->create();
-            
+
             $response = $this->actingAs($this->user, 'sanctum')
                 ->getJson('/api/projects');
 
@@ -37,15 +38,15 @@ describe('Project API Controller', function () {
                             'status',
                             'created_at',
                             'keywords_count',
-                            'competitors_count'
-                        ]
+                            'competitors_count',
+                        ],
                     ],
                     'links',
-                    'meta'
+                    'meta',
                 ]);
         });
 
-        it('filters projects by search term', function () {
+        it('filters projects by search term', function (): void {
             Project::factory()->for($this->tenant)->create(['name' => 'SEO Project Alpha']);
             Project::factory()->for($this->tenant)->create(['name' => 'Marketing Project Beta']);
             Project::factory()->for($this->tenant)->create(['domain' => 'seo-site.com']);
@@ -57,7 +58,7 @@ describe('Project API Controller', function () {
                 ->assertJsonCount(2, 'data');
         });
 
-        it('filters projects by status', function () {
+        it('filters projects by status', function (): void {
             Project::factory()->for($this->tenant)->create(['status' => 'active']);
             Project::factory()->for($this->tenant)->create(['status' => 'archived']);
 
@@ -68,7 +69,7 @@ describe('Project API Controller', function () {
                 ->assertJsonCount(1, 'data');
         });
 
-        it('sorts projects by specified field', function () {
+        it('sorts projects by specified field', function (): void {
             $project1 = Project::factory()->for($this->tenant)->create(['name' => 'Alpha Project']);
             $project2 = Project::factory()->for($this->tenant)->create(['name' => 'Beta Project']);
 
@@ -76,13 +77,13 @@ describe('Project API Controller', function () {
                 ->getJson('/api/projects?sort=name&direction=asc');
 
             $response->assertOk();
-            
+
             $data = $response->json('data');
             expect($data[0]['name'])->toBe('Alpha Project');
             expect($data[1]['name'])->toBe('Beta Project');
         });
 
-        it('paginates results', function () {
+        it('paginates results', function (): void {
             Project::factory()->count(20)->for($this->tenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
@@ -93,7 +94,7 @@ describe('Project API Controller', function () {
                 ->assertJsonPath('meta.per_page', 10);
         });
 
-        it('does not return other tenant projects', function () {
+        it('does not return other tenant projects', function (): void {
             Project::factory()->count(2)->for($this->tenant)->create();
             Project::factory()->count(3)->for($this->otherTenant)->create();
 
@@ -104,22 +105,22 @@ describe('Project API Controller', function () {
                 ->assertJsonCount(2, 'data');
         });
 
-        it('requires authentication', function () {
+        it('requires authentication', function (): void {
             $response = $this->getJson('/api/projects');
 
             $response->assertUnauthorized();
         });
     });
 
-    describe('POST /api/projects', function () {
-        it('creates a new project with valid data', function () {
+    describe('POST /api/projects', function (): void {
+        it('creates a new project with valid data', function (): void {
             $projectData = [
                 'name' => 'New SEO Project',
                 'domain' => 'example.com',
                 'description' => 'A test project',
                 'target_location' => 'United States',
                 'target_language' => 'en',
-                'settings' => ['tracking_enabled' => true]
+                'settings' => ['tracking_enabled' => true],
             ];
 
             $response = $this->actingAs($this->user, 'sanctum')
@@ -128,17 +129,17 @@ describe('Project API Controller', function () {
             $response->assertCreated()
                 ->assertJsonFragment([
                     'name' => 'New SEO Project',
-                    'domain' => 'example.com'
+                    'domain' => 'example.com',
                 ]);
 
             $this->assertDatabaseHas('projects', [
                 'tenant_id' => $this->tenant->id,
                 'name' => 'New SEO Project',
-                'domain' => 'example.com'
+                'domain' => 'example.com',
             ]);
         });
 
-        it('validates required fields', function () {
+        it('validates required fields', function (): void {
             $response = $this->actingAs($this->user, 'sanctum')
                 ->postJson('/api/projects', []);
 
@@ -146,63 +147,63 @@ describe('Project API Controller', function () {
                 ->assertJsonValidationErrors(['name', 'domain']);
         });
 
-        it('validates domain format', function () {
+        it('validates domain format', function (): void {
             $response = $this->actingAs($this->user, 'sanctum')
                 ->postJson('/api/projects', [
                     'name' => 'Test Project',
-                    'domain' => 'invalid-domain-format'
+                    'domain' => 'invalid-domain-format',
                 ]);
 
             $response->assertUnprocessable()
                 ->assertJsonValidationErrors('domain');
         });
 
-        it('creates project with default values', function () {
+        it('creates project with default values', function (): void {
             $response = $this->actingAs($this->user, 'sanctum')
                 ->postJson('/api/projects', [
                     'name' => 'Minimal Project',
-                    'domain' => 'minimal.com'
+                    'domain' => 'minimal.com',
                 ]);
 
             $response->assertCreated();
-            
-            $project = Project::where('name', 'Minimal Project')->first();
+
+            $project = Project::query()->where('name', 'Minimal Project')->first();
             expect($project->status)->toBe('active');
             expect($project->target_location)->toBe('United States');
             expect($project->target_language)->toBe('en');
         });
 
-        it('associates project with authenticated user tenant', function () {
+        it('associates project with authenticated user tenant', function (): void {
             $response = $this->actingAs($this->user, 'sanctum')
                 ->postJson('/api/projects', [
                     'name' => 'Tenant Project',
-                    'domain' => 'tenant.com'
+                    'domain' => 'tenant.com',
                 ]);
 
             $response->assertCreated();
-            
-            $project = Project::where('name', 'Tenant Project')->first();
+
+            $project = Project::query()->where('name', 'Tenant Project')->first();
             expect($project->tenant_id)->toBe($this->tenant->id);
         });
 
-        it('requires authentication', function () {
+        it('requires authentication', function (): void {
             $response = $this->postJson('/api/projects', [
                 'name' => 'Unauthorized Project',
-                'domain' => 'unauthorized.com'
+                'domain' => 'unauthorized.com',
             ]);
 
             $response->assertUnauthorized();
         });
     });
 
-    describe('GET /api/projects/{project}', function () {
-        it('returns project with relationships', function () {
+    describe('GET /api/projects/{project}', function (): void {
+        it('returns project with relationships', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
             $keywords = Keyword::factory()->count(3)->for($project)->for($this->tenant)->create();
             $competitor = Competitor::factory()->for($project)->for($this->tenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$project->id}");
+                ->getJson('/api/projects/'.$project->id);
 
             $response->assertOk()
                 ->assertJsonStructure([
@@ -215,94 +216,94 @@ describe('Project API Controller', function () {
                                 'id',
                                 'keyword',
                                 'current_position',
-                                'positions'
-                            ]
+                                'positions',
+                            ],
                         ],
                         'competitors' => [
                             '*' => [
                                 'id',
                                 'name',
-                                'domain'
-                            ]
+                                'domain',
+                            ],
                         ],
-                        'reports'
-                    ]
+                        'reports',
+                    ],
                 ]);
         });
 
-        it('returns 404 for non-existent project', function () {
+        it('returns 404 for non-existent project', function (): void {
             $response = $this->actingAs($this->user, 'sanctum')
                 ->getJson('/api/projects/99999');
 
             $response->assertNotFound();
         });
 
-        it('prevents access to other tenant projects', function () {
+        it('prevents access to other tenant projects', function (): void {
             $otherProject = Project::factory()->for($this->otherTenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$otherProject->id}");
+                ->getJson('/api/projects/'.$otherProject->id);
 
             $response->assertForbidden();
         });
 
-        it('requires authentication', function () {
+        it('requires authentication', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
 
-            $response = $this->getJson("/api/projects/{$project->id}");
+            $response = $this->getJson('/api/projects/'.$project->id);
 
             $response->assertUnauthorized();
         });
     });
 
-    describe('PUT /api/projects/{project}', function () {
-        it('updates project with valid data', function () {
+    describe('PUT /api/projects/{project}', function (): void {
+        it('updates project with valid data', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
 
             $updateData = [
                 'name' => 'Updated Project Name',
                 'description' => 'Updated description',
-                'status' => 'paused'
+                'status' => 'paused',
             ];
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->putJson("/api/projects/{$project->id}", $updateData);
+                ->putJson('/api/projects/'.$project->id, $updateData);
 
             $response->assertOk()
                 ->assertJsonFragment([
                     'name' => 'Updated Project Name',
                     'description' => 'Updated description',
-                    'status' => 'paused'
+                    'status' => 'paused',
                 ]);
 
             $project->refresh();
             expect($project->name)->toBe('Updated Project Name');
         });
 
-        it('validates update data', function () {
+        it('validates update data', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->putJson("/api/projects/{$project->id}", [
-                    'domain' => 'invalid-domain'
+                ->putJson('/api/projects/'.$project->id, [
+                    'domain' => 'invalid-domain',
                 ]);
 
             $response->assertUnprocessable()
                 ->assertJsonValidationErrors('domain');
         });
 
-        it('prevents updating other tenant projects', function () {
+        it('prevents updating other tenant projects', function (): void {
             $otherProject = Project::factory()->for($this->otherTenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->putJson("/api/projects/{$otherProject->id}", [
-                    'name' => 'Hacked Project'
+                ->putJson('/api/projects/'.$otherProject->id, [
+                    'name' => 'Hacked Project',
                 ]);
 
             $response->assertForbidden();
         });
 
-        it('returns 404 for non-existent project', function () {
+        it('returns 404 for non-existent project', function (): void {
             $response = $this->actingAs($this->user, 'sanctum')
                 ->putJson('/api/projects/99999', ['name' => 'Test']);
 
@@ -310,12 +311,12 @@ describe('Project API Controller', function () {
         });
     });
 
-    describe('DELETE /api/projects/{project}', function () {
-        it('deletes project successfully', function () {
+    describe('DELETE /api/projects/{project}', function (): void {
+        it('deletes project successfully', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->deleteJson("/api/projects/{$project->id}");
+                ->deleteJson('/api/projects/'.$project->id);
 
             $response->assertOk()
                 ->assertJsonFragment(['message' => 'Project deleted successfully']);
@@ -323,16 +324,16 @@ describe('Project API Controller', function () {
             $this->assertSoftDeleted($project);
         });
 
-        it('prevents deleting other tenant projects', function () {
+        it('prevents deleting other tenant projects', function (): void {
             $otherProject = Project::factory()->for($this->otherTenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->deleteJson("/api/projects/{$otherProject->id}");
+                ->deleteJson('/api/projects/'.$otherProject->id);
 
             $response->assertForbidden();
         });
 
-        it('returns 404 for non-existent project', function () {
+        it('returns 404 for non-existent project', function (): void {
             $response = $this->actingAs($this->user, 'sanctum')
                 ->deleteJson('/api/projects/99999');
 
@@ -340,119 +341,119 @@ describe('Project API Controller', function () {
         });
     });
 
-    describe('GET /api/projects/{project}/dashboard', function () {
-        it('returns comprehensive dashboard data', function () {
+    describe('GET /api/projects/{project}/dashboard', function (): void {
+        it('returns comprehensive dashboard data', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
             $keywords = Keyword::factory()->count(5)->for($project)->for($this->tenant)->create();
-            
+
             // Create some position history
             foreach ($keywords as $keyword) {
                 KeywordPosition::factory()->count(3)->for($keyword)->for($this->tenant)->create();
             }
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$project->id}/dashboard");
+                ->getJson(sprintf('/api/projects/%s/dashboard', $project->id));
 
             $response->assertOk()
                 ->assertJsonStructure([
                     'project',
                     'metrics' => [
                         'visibility_score',
-                        'traffic_potential'
+                        'traffic_potential',
                     ],
                     'recent_activity' => [
                         'position_changes',
                         'new_rankings',
-                        'lost_rankings'
+                        'lost_rankings',
                     ],
                     'charts' => [
                         'position_trends',
-                        'visibility_history'
-                    ]
+                        'visibility_history',
+                    ],
                 ]);
         });
 
-        it('calculates metrics correctly', function () {
+        it('calculates metrics correctly', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
-            
+
             // Create keyword with known position and volume
             $keyword = Keyword::factory()->for($project)->for($this->tenant)->create([
                 'current_position' => 1,
-                'search_volume' => 1000
+                'search_volume' => 1000,
             ]);
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$project->id}/dashboard");
+                ->getJson(sprintf('/api/projects/%s/dashboard', $project->id));
 
             $response->assertOk();
-            
+
             $metrics = $response->json('metrics');
             expect($metrics['visibility_score'])->toBe(31.7); // Position 1 CTR
         });
 
-        it('prevents access to other tenant projects', function () {
+        it('prevents access to other tenant projects', function (): void {
             $otherProject = Project::factory()->for($this->otherTenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$otherProject->id}/dashboard");
+                ->getJson(sprintf('/api/projects/%s/dashboard', $otherProject->id));
 
             $response->assertForbidden();
         });
     });
 
-    describe('GET /api/projects/{project}/analytics', function () {
-        it('returns analytics data for date range', function () {
+    describe('GET /api/projects/{project}/analytics', function (): void {
+        it('returns analytics data for date range', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$project->id}/analytics?start_date=2024-01-01&end_date=2024-01-31");
+                ->getJson(sprintf('/api/projects/%s/analytics?start_date=2024-01-01&end_date=2024-01-31', $project->id));
 
             $response->assertOk()
                 ->assertJsonStructure([
-                    'keyword_traffic'
+                    'keyword_traffic',
                 ]);
         });
 
-        it('includes search console data when configured', function () {
+        it('includes search console data when configured', function (): void {
             $project = Project::factory()->for($this->tenant)->create([
-                'gsc_property_url' => 'https://example.com'
+                'gsc_property_url' => 'https://example.com',
             ]);
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$project->id}/analytics");
+                ->getJson(sprintf('/api/projects/%s/analytics', $project->id));
 
             $response->assertOk()
                 ->assertJsonStructure([
                     'search_console',
-                    'keyword_traffic'
+                    'keyword_traffic',
                 ]);
         });
 
-        it('includes analytics data when configured', function () {
+        it('includes analytics data when configured', function (): void {
             $project = Project::factory()->for($this->tenant)->create([
-                'ga4_property_id' => 'GA4-12345'
+                'ga4_property_id' => 'GA4-12345',
             ]);
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$project->id}/analytics");
+                ->getJson(sprintf('/api/projects/%s/analytics', $project->id));
 
             $response->assertOk()
                 ->assertJsonStructure([
                     'google_analytics',
-                    'keyword_traffic'
+                    'keyword_traffic',
                 ]);
         });
     });
 
-    describe('POST /api/projects/bulk-update', function () {
-        it('updates multiple projects successfully', function () {
+    describe('POST /api/projects/bulk-update', function (): void {
+        it('updates multiple projects successfully', function (): void {
             $projects = Project::factory()->count(3)->for($this->tenant)->create();
             $projectIds = $projects->pluck('id')->toArray();
 
             $response = $this->actingAs($this->user, 'sanctum')
                 ->postJson('/api/projects/bulk-update', [
                     'project_ids' => $projectIds,
-                    'updates' => ['status' => 'paused']
+                    'updates' => ['status' => 'paused'],
                 ]);
 
             $response->assertOk()
@@ -464,25 +465,25 @@ describe('Project API Controller', function () {
             }
         });
 
-        it('validates project IDs exist', function () {
+        it('validates project IDs exist', function (): void {
             $response = $this->actingAs($this->user, 'sanctum')
                 ->postJson('/api/projects/bulk-update', [
                     'project_ids' => [99999],
-                    'updates' => ['status' => 'paused']
+                    'updates' => ['status' => 'paused'],
                 ]);
 
             $response->assertUnprocessable()
                 ->assertJsonValidationErrors('project_ids.0');
         });
 
-        it('only updates tenant-owned projects', function () {
+        it('only updates tenant-owned projects', function (): void {
             $tenantProject = Project::factory()->for($this->tenant)->create();
             $otherProject = Project::factory()->for($this->otherTenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
                 ->postJson('/api/projects/bulk-update', [
                     'project_ids' => [$tenantProject->id, $otherProject->id],
-                    'updates' => ['status' => 'paused']
+                    'updates' => ['status' => 'paused'],
                 ]);
 
             $response->assertOk()
@@ -490,18 +491,18 @@ describe('Project API Controller', function () {
 
             $tenantProject->refresh();
             $otherProject->refresh();
-            
+
             expect($tenantProject->status)->toBe('paused');
             expect($otherProject->status)->not->toBe('paused');
         });
     });
 
-    describe('POST /api/projects/{project}/archive', function () {
-        it('archives active project', function () {
+    describe('POST /api/projects/{project}/archive', function (): void {
+        it('archives active project', function (): void {
             $project = Project::factory()->for($this->tenant)->create(['status' => 'active']);
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->postJson("/api/projects/{$project->id}/archive");
+                ->postJson(sprintf('/api/projects/%s/archive', $project->id));
 
             $response->assertOk()
                 ->assertJsonFragment(['message' => 'Project archived successfully']);
@@ -510,11 +511,11 @@ describe('Project API Controller', function () {
             expect($project->status)->toBe('archived');
         });
 
-        it('restores archived project', function () {
+        it('restores archived project', function (): void {
             $project = Project::factory()->for($this->tenant)->create(['status' => 'archived']);
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->postJson("/api/projects/{$project->id}/archive");
+                ->postJson(sprintf('/api/projects/%s/archive', $project->id));
 
             $response->assertOk()
                 ->assertJsonFragment(['message' => 'Project restored successfully']);
@@ -523,23 +524,23 @@ describe('Project API Controller', function () {
             expect($project->status)->toBe('active');
         });
 
-        it('prevents archiving other tenant projects', function () {
+        it('prevents archiving other tenant projects', function (): void {
             $otherProject = Project::factory()->for($this->otherTenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->postJson("/api/projects/{$otherProject->id}/archive");
+                ->postJson(sprintf('/api/projects/%s/archive', $otherProject->id));
 
             $response->assertForbidden();
         });
     });
 
-    describe('GET /api/projects/{project}/competitors', function () {
-        it('returns competitor data with metrics', function () {
+    describe('GET /api/projects/{project}/competitors', function (): void {
+        it('returns competitor data with metrics', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
             $competitor = Competitor::factory()->for($project)->for($this->tenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$project->id}/competitors");
+                ->getJson(sprintf('/api/projects/%s/competitors', $project->id));
 
             $response->assertOk()
                 ->assertJsonStructure([
@@ -550,87 +551,87 @@ describe('Project API Controller', function () {
                         'average_position',
                         'total_keywords',
                         'last_updated',
-                        'trend'
-                    ]
+                        'trend',
+                    ],
                 ]);
         });
 
-        it('calculates competitor metrics correctly', function () {
+        it('calculates competitor metrics correctly', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
             $competitor = Competitor::factory()->for($project)->for($this->tenant)->create();
 
             // Create keyword positions for competitor analysis
             $keyword = Keyword::factory()->for($project)->for($this->tenant)->create();
             KeywordPosition::factory()->count(3)->for($keyword)->for($this->tenant)->create([
-                'position' => 5
+                'position' => 5,
             ]);
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$project->id}/competitors");
+                ->getJson(sprintf('/api/projects/%s/competitors', $project->id));
 
             $response->assertOk();
-            
+
             $competitorData = $response->json();
             expect($competitorData[0]['total_keywords'])->toBeGreaterThan(0);
         });
 
-        it('prevents access to other tenant projects', function () {
+        it('prevents access to other tenant projects', function (): void {
             $otherProject = Project::factory()->for($this->otherTenant)->create();
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$otherProject->id}/competitors");
+                ->getJson(sprintf('/api/projects/%s/competitors', $otherProject->id));
 
             $response->assertForbidden();
         });
     });
 
-    describe('Rate Limiting and Performance', function () {
-        it('handles concurrent requests efficiently', function () {
+    describe('Rate Limiting and Performance', function (): void {
+        it('handles concurrent requests efficiently', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
 
             // Test with performance assertion
-            $this->assertResponseTimeLessThan(2000, function () use ($project) {
+            $this->assertResponseTimeLessThan(2000, function () use ($project): void {
                 $responses = [];
                 for ($i = 0; $i < 5; $i++) {
                     $responses[] = $this->actingAs($this->user, 'sanctum')
-                        ->getJson("/api/projects/{$project->id}");
+                        ->getJson('/api/projects/'.$project->id);
                 }
-                
+
                 foreach ($responses as $response) {
                     $response->assertOk();
                 }
             });
         });
 
-        it('optimizes database queries for large datasets', function () {
+        it('optimizes database queries for large datasets', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
-            
+
             // Create large dataset
             Keyword::factory()->count(50)->for($project)->for($this->tenant)->create();
 
             // Test query efficiency
-            $this->assertQueryCountLessThan(20, function () use ($project) {
+            $this->assertQueryCountLessThan(20, function () use ($project): void {
                 $this->actingAs($this->user, 'sanctum')
-                    ->getJson("/api/projects/{$project->id}");
+                    ->getJson('/api/projects/'.$project->id);
             });
         });
     });
 
-    describe('Error Handling', function () {
-        it('handles database errors gracefully', function () {
+    describe('Error Handling', function (): void {
+        it('handles database errors gracefully', function (): void {
             $project = Project::factory()->for($this->tenant)->create();
-            
+
             // Mock database error scenario
-            \DB::shouldReceive('table')->andThrow(new \Exception('Database connection failed'));
+            DB::shouldReceive('table')->andThrow(new Exception('Database connection failed'));
 
             $response = $this->actingAs($this->user, 'sanctum')
-                ->getJson("/api/projects/{$project->id}");
+                ->getJson('/api/projects/'.$project->id);
 
             // In a real scenario, this should return a 500 or be handled gracefully
             expect($response->status())->toBeIn([500, 503]);
         });
 
-        it('validates malformed JSON requests', function () {
+        it('validates malformed JSON requests', function (): void {
             $response = $this->actingAs($this->user, 'sanctum')
                 ->postJson('/api/projects', '{"invalid": json}');
 
@@ -638,30 +639,30 @@ describe('Project API Controller', function () {
         });
     });
 
-    describe('Data Integrity and Validation', function () {
-        it('prevents SQL injection in search parameters', function () {
+    describe('Data Integrity and Validation', function (): void {
+        it('prevents SQL injection in search parameters', function (): void {
             $project = Project::factory()->for($this->tenant)->create(['name' => 'Normal Project']);
 
             $response = $this->actingAs($this->user, 'sanctum')
                 ->getJson("/api/projects?search='; DROP TABLE projects; --");
 
             $response->assertOk();
-            
+
             // Verify project still exists
             $this->assertDatabaseHas('projects', ['id' => $project->id]);
         });
 
-        it('sanitizes input data properly', function () {
+        it('sanitizes input data properly', function (): void {
             $response = $this->actingAs($this->user, 'sanctum')
                 ->postJson('/api/projects', [
                     'name' => '<script>alert("xss")</script>Test Project',
                     'domain' => 'test.com',
-                    'description' => '<b>Bold</b> description'
+                    'description' => '<b>Bold</b> description',
                 ]);
 
             $response->assertCreated();
-            
-            $project = Project::where('domain', 'test.com')->first();
+
+            $project = Project::query()->where('domain', 'test.com')->first();
             expect($project->name)->not->toContain('<script>');
         });
     });

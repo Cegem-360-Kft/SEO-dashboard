@@ -1,14 +1,17 @@
 <?php
 
-use App\Models\KeywordPosition;
+declare(strict_types=1);
+
 use App\Models\Keyword;
+use App\Models\KeywordPosition;
 use App\Models\Project;
 use App\Models\Tenant;
+use Carbon\Carbon;
 
-describe('KeywordPosition Model', function () {
-    
-    describe('Factory and Creation', function () {
-        it('can be created with valid data', function () {
+describe('KeywordPosition Model', function (): void {
+
+    describe('Factory and Creation', function (): void {
+        it('can be created with valid data', function (): void {
             $tenant = Tenant::factory()->create();
             $project = Project::factory()->for($tenant)->create();
             $keyword = Keyword::factory()->for($project)->for($tenant)->create();
@@ -20,18 +23,18 @@ describe('KeywordPosition Model', function () {
             expect($position->position)->toHaveValidPosition();
         });
 
-        it('calculates estimated traffic and value correctly', function () {
+        it('calculates estimated traffic and value correctly', function (): void {
             $position = KeywordPosition::factory()->create([
                 'position' => 1,
                 'estimated_traffic' => 1000,
-                'estimated_value' => 250.50
+                'estimated_value' => 250.50,
             ]);
 
             expect($position->estimated_traffic)->toBe(1000);
             expect($position->estimated_value)->toBe(250.50);
         });
 
-        it('can create top ranking positions', function () {
+        it('can create top ranking positions', function (): void {
             $topPosition = KeywordPosition::factory()->topThree()->create();
             $top10Position = KeywordPosition::factory()->topTen()->create();
 
@@ -39,7 +42,7 @@ describe('KeywordPosition Model', function () {
             expect($top10Position->position)->toBeWithinRange(1, 10);
         });
 
-        it('can create positions with special features', function () {
+        it('can create positions with special features', function (): void {
             $featuredPosition = KeywordPosition::factory()->withFeaturedSnippet()->create();
             $localPosition = KeywordPosition::factory()->withLocalPack()->create();
 
@@ -49,8 +52,8 @@ describe('KeywordPosition Model', function () {
         });
     });
 
-    describe('Relationships', function () {
-        it('belongs to a keyword', function () {
+    describe('Relationships', function (): void {
+        it('belongs to a keyword', function (): void {
             $keyword = Keyword::factory()->create();
             $position = KeywordPosition::factory()->for($keyword)->for($keyword->tenant)->create();
 
@@ -59,8 +62,8 @@ describe('KeywordPosition Model', function () {
         });
     });
 
-    describe('Scopes', function () {
-        it('scopes by date', function () {
+    describe('Scopes', function (): void {
+        it('scopes by date', function (): void {
             $date = '2024-01-15';
             $position1 = KeywordPosition::factory()->forDate($date)->create();
             $position2 = KeywordPosition::factory()->forDate('2024-01-20')->create();
@@ -71,7 +74,7 @@ describe('KeywordPosition Model', function () {
             expect($datePositions)->not->toContain($position2);
         });
 
-        it('scopes by search engine', function () {
+        it('scopes by search engine', function (): void {
             $googlePosition = KeywordPosition::factory()->forSearchEngine('google')->create();
             $bingPosition = KeywordPosition::factory()->forSearchEngine('bing')->create();
 
@@ -81,7 +84,7 @@ describe('KeywordPosition Model', function () {
             expect($googlePositions)->not->toContain($bingPosition);
         });
 
-        it('scopes by device', function () {
+        it('scopes by device', function (): void {
             $desktopPosition = KeywordPosition::factory()->forDevice('desktop')->create();
             $mobilePosition = KeywordPosition::factory()->forDevice('mobile')->create();
 
@@ -91,7 +94,7 @@ describe('KeywordPosition Model', function () {
             expect($desktopPositions)->not->toContain($mobilePosition);
         });
 
-        it('scopes top 10 positions', function () {
+        it('scopes top 10 positions', function (): void {
             $topPosition = KeywordPosition::factory()->create(['position' => 5]);
             $lowPosition = KeywordPosition::factory()->create(['position' => 25]);
 
@@ -101,7 +104,7 @@ describe('KeywordPosition Model', function () {
             expect($top10Positions)->not->toContain($lowPosition);
         });
 
-        it('scopes positions with featured snippets', function () {
+        it('scopes positions with featured snippets', function (): void {
             $featuredPosition = KeywordPosition::factory()->withFeaturedSnippet()->create();
             $regularPosition = KeywordPosition::factory()->create(['is_featured_snippet' => false]);
 
@@ -111,7 +114,7 @@ describe('KeywordPosition Model', function () {
             expect($featuredPositions)->not->toContain($regularPosition);
         });
 
-        it('scopes positions with local pack', function () {
+        it('scopes positions with local pack', function (): void {
             $localPosition = KeywordPosition::factory()->withLocalPack()->create();
             $regularPosition = KeywordPosition::factory()->create(['is_local_pack' => false]);
 
@@ -121,7 +124,7 @@ describe('KeywordPosition Model', function () {
             expect($localPositions)->not->toContain($regularPosition);
         });
 
-        it('scopes by date range', function () {
+        it('scopes by date range', function (): void {
             $position1 = KeywordPosition::factory()->create(['date' => '2024-01-10']);
             $position2 = KeywordPosition::factory()->create(['date' => '2024-01-15']);
             $position3 = KeywordPosition::factory()->create(['date' => '2024-01-25']);
@@ -134,8 +137,8 @@ describe('KeywordPosition Model', function () {
         });
     });
 
-    describe('Analytics Methods', function () {
-        it('correctly identifies improvement', function () {
+    describe('Analytics Methods', function (): void {
+        it('correctly identifies improvement', function (): void {
             $current = KeywordPosition::factory()->create(['position' => 5]);
             $previous = KeywordPosition::factory()->create(['position' => 10]);
 
@@ -143,7 +146,7 @@ describe('KeywordPosition Model', function () {
             expect($current->hasDeclined($previous))->toBeFalse();
         });
 
-        it('correctly identifies decline', function () {
+        it('correctly identifies decline', function (): void {
             $current = KeywordPosition::factory()->create(['position' => 15]);
             $previous = KeywordPosition::factory()->create(['position' => 8]);
 
@@ -151,7 +154,7 @@ describe('KeywordPosition Model', function () {
             expect($current->hasImproved($previous))->toBeFalse();
         });
 
-        it('handles no previous position', function () {
+        it('handles no previous position', function (): void {
             $current = KeywordPosition::factory()->create(['position' => 10]);
 
             expect($current->hasImproved(null))->toBeFalse();
@@ -159,14 +162,14 @@ describe('KeywordPosition Model', function () {
             expect($current->getPositionChange(null))->toBe(0);
         });
 
-        it('calculates position change correctly', function () {
+        it('calculates position change correctly', function (): void {
             $current = KeywordPosition::factory()->create(['position' => 5]);
             $previous = KeywordPosition::factory()->create(['position' => 12]);
 
             expect($current->getPositionChange($previous))->toBe(7); // Improved by 7 positions
         });
 
-        it('identifies ranking positions', function () {
+        it('identifies ranking positions', function (): void {
             $rankingPosition = KeywordPosition::factory()->create(['position' => 15]);
             $notRankingPosition = KeywordPosition::factory()->create(['position' => null]);
 
@@ -175,8 +178,8 @@ describe('KeywordPosition Model', function () {
         });
     });
 
-    describe('Visibility Score Calculation', function () {
-        it('calculates visibility score correctly for different positions', function () {
+    describe('Visibility Score Calculation', function (): void {
+        it('calculates visibility score correctly for different positions', function (): void {
             $position1 = KeywordPosition::factory()->create(['position' => 1]);
             $position5 = KeywordPosition::factory()->create(['position' => 5]);
             $position15 = KeywordPosition::factory()->create(['position' => 15]);
@@ -188,15 +191,15 @@ describe('KeywordPosition Model', function () {
             expect($position50->getVisibilityScore())->toBe(1.0);
         });
 
-        it('returns zero visibility for no position', function () {
+        it('returns zero visibility for no position', function (): void {
             $position = KeywordPosition::factory()->create(['position' => null]);
 
             expect($position->getVisibilityScore())->toBe(0.0);
         });
     });
 
-    describe('CTR Estimation', function () {
-        it('estimates CTR correctly for different positions', function () {
+    describe('CTR Estimation', function (): void {
+        it('estimates CTR correctly for different positions', function (): void {
             $position1 = KeywordPosition::factory()->create(['position' => 1]);
             $position2 = KeywordPosition::factory()->create(['position' => 2]);
             $position10 = KeywordPosition::factory()->create(['position' => 10]);
@@ -208,37 +211,37 @@ describe('KeywordPosition Model', function () {
             expect($position50->getCtrEstimate())->toBe(1.0); // Default for positions > 10
         });
 
-        it('returns zero CTR for no position', function () {
+        it('returns zero CTR for no position', function (): void {
             $position = KeywordPosition::factory()->create(['position' => null]);
 
             expect($position->getCtrEstimate())->toBe(0.0);
         });
     });
 
-    describe('Special Features Detection', function () {
-        it('detects special features correctly', function () {
+    describe('Special Features Detection', function (): void {
+        it('detects special features correctly', function (): void {
             $featuredPosition = KeywordPosition::factory()->create([
                 'is_featured_snippet' => true,
                 'is_local_pack' => false,
-                'serp_features' => []
+                'serp_features' => [],
             ]);
 
             $localPosition = KeywordPosition::factory()->create([
                 'is_featured_snippet' => false,
                 'is_local_pack' => true,
-                'serp_features' => []
+                'serp_features' => [],
             ]);
 
             $serpFeaturesPosition = KeywordPosition::factory()->create([
                 'is_featured_snippet' => false,
                 'is_local_pack' => false,
-                'serp_features' => ['image_pack', 'people_also_ask']
+                'serp_features' => ['image_pack', 'people_also_ask'],
             ]);
 
             $regularPosition = KeywordPosition::factory()->create([
                 'is_featured_snippet' => false,
                 'is_local_pack' => false,
-                'serp_features' => []
+                'serp_features' => [],
             ]);
 
             expect($featuredPosition->hasSpecialFeature())->toBeTrue();
@@ -248,8 +251,8 @@ describe('KeywordPosition Model', function () {
         });
     });
 
-    describe('Casts and Attributes', function () {
-        it('casts attributes correctly', function () {
+    describe('Casts and Attributes', function (): void {
+        it('casts attributes correctly', function (): void {
             $position = KeywordPosition::factory()->create([
                 'date' => '2024-01-15',
                 'serp_features' => ['featured_snippet', 'image_pack'],
@@ -257,21 +260,21 @@ describe('KeywordPosition Model', function () {
                 'is_featured_snippet' => '1',
                 'is_local_pack' => '0',
                 'is_paid_above' => '1',
-                'checked_at' => '2024-01-15 10:30:00'
+                'checked_at' => '2024-01-15 10:30:00',
             ]);
 
-            expect($position->date)->toBeInstanceOf(\Carbon\Carbon::class);
+            expect($position->date)->toBeInstanceOf(Carbon::class);
             expect($position->serp_features)->toBeArray();
             expect($position->estimated_value)->toBe(125.75);
             expect($position->is_featured_snippet)->toBeTrue();
             expect($position->is_local_pack)->toBeFalse();
             expect($position->is_paid_above)->toBeTrue();
-            expect($position->checked_at)->toBeInstanceOf(\Carbon\Carbon::class);
+            expect($position->checked_at)->toBeInstanceOf(Carbon::class);
         });
     });
 
-    describe('Factory States Validation', function () {
-        it('creates mobile and desktop positions correctly', function () {
+    describe('Factory States Validation', function (): void {
+        it('creates mobile and desktop positions correctly', function (): void {
             $mobilePosition = KeywordPosition::factory()->mobile()->create();
             $desktopPosition = KeywordPosition::factory()->desktop()->create();
 
@@ -279,22 +282,22 @@ describe('KeywordPosition Model', function () {
             expect($desktopPosition->device)->toBe('desktop');
         });
 
-        it('creates high value positions correctly', function () {
+        it('creates high value positions correctly', function (): void {
             $highValuePosition = KeywordPosition::factory()->highValue()->create();
 
             expect($highValuePosition->position)->toBeWithinRange(1, 10);
             expect($highValuePosition->estimated_value)->toBeGreaterThan(0);
         });
 
-        it('creates recent positions correctly', function () {
+        it('creates recent positions correctly', function (): void {
             $recentPosition = KeywordPosition::factory()->recent()->create();
 
             expect($recentPosition->date)->toBeGreaterThanOrEqual(now()->subDays(3)->format('Y-m-d'));
         });
     });
 
-    describe('Business Logic Edge Cases', function () {
-        it('handles identical positions for comparison', function () {
+    describe('Business Logic Edge Cases', function (): void {
+        it('handles identical positions for comparison', function (): void {
             $current = KeywordPosition::factory()->create(['position' => 10]);
             $previous = KeywordPosition::factory()->create(['position' => 10]);
 
@@ -303,7 +306,7 @@ describe('KeywordPosition Model', function () {
             expect($current->getPositionChange($previous))->toBe(0);
         });
 
-        it('handles extreme position values', function () {
+        it('handles extreme position values', function (): void {
             $extremePosition = KeywordPosition::factory()->create(['position' => 999]);
 
             expect($extremePosition->getVisibilityScore())->toBe(1.0);
@@ -312,8 +315,8 @@ describe('KeywordPosition Model', function () {
         });
     });
 
-    describe('Tenant Isolation', function () {
-        it('maintains proper tenant relationships', function () {
+    describe('Tenant Isolation', function (): void {
+        it('maintains proper tenant relationships', function (): void {
             $tenant = Tenant::factory()->create();
             $project = Project::factory()->for($tenant)->create();
             $keyword = Keyword::factory()->for($project)->for($tenant)->create();
@@ -323,21 +326,21 @@ describe('KeywordPosition Model', function () {
             expect($position->keyword->tenant_id)->toBe($tenant->id);
         });
 
-        it('isolates positions by tenant', function () {
+        it('isolates positions by tenant', function (): void {
             $tenant1 = Tenant::factory()->create();
             $tenant2 = Tenant::factory()->create();
-            
+
             $project1 = Project::factory()->for($tenant1)->create();
             $project2 = Project::factory()->for($tenant2)->create();
-            
+
             $keyword1 = Keyword::factory()->for($project1)->for($tenant1)->create();
             $keyword2 = Keyword::factory()->for($project2)->for($tenant2)->create();
-            
+
             $positions1 = KeywordPosition::factory()->count(3)->for($keyword1)->for($tenant1)->create();
             $positions2 = KeywordPosition::factory()->count(2)->for($keyword2)->for($tenant2)->create();
 
-            expect(KeywordPosition::where('tenant_id', $tenant1->id)->count())->toBe(3);
-            expect(KeywordPosition::where('tenant_id', $tenant2->id)->count())->toBe(2);
+            expect(KeywordPosition::query()->where('tenant_id', $tenant1->id)->count())->toBe(3);
+            expect(KeywordPosition::query()->where('tenant_id', $tenant2->id)->count())->toBe(2);
         });
     });
 });

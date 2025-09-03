@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 // use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -9,9 +11,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
-class Tenant extends Model
+final class Tenant extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory;
+    use SoftDeletes;
 
     protected $fillable = [
         'uuid',
@@ -36,20 +39,6 @@ class Tenant extends Model
         'trial_ends_at' => 'datetime',
         'subscription_ends_at' => 'datetime',
     ];
-
-    protected static function boot()
-    {
-        parent::boot();
-        
-        static::creating(function ($tenant) {
-            if (empty($tenant->uuid)) {
-                $tenant->uuid = Str::uuid();
-            }
-            if (empty($tenant->slug)) {
-                $tenant->slug = Str::slug($tenant->name);
-            }
-        });
-    }
 
     public function users(): HasMany
     {
@@ -118,5 +107,20 @@ class Tenant extends Model
     public function uniqueIds(): array
     {
         return ['uuid'];
+    }
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        self::creating(function ($tenant): void {
+            if (empty($tenant->uuid)) {
+                $tenant->uuid = Str::uuid();
+            }
+
+            if (empty($tenant->slug)) {
+                $tenant->slug = Str::slug($tenant->name);
+            }
+        });
     }
 }

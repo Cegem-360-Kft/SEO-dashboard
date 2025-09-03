@@ -1,32 +1,34 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class SecurityHeaders
+final class SecurityHeaders
 {
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request):Response  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
         $response = $next($request);
 
         // Content Security Policy
-        $response->headers->set('Content-Security-Policy', 
-            "default-src 'self'; " .
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; " .
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " .
-            "font-src 'self' https://fonts.gstatic.com; " .
-            "img-src 'self' data: https:; " .
-            "connect-src 'self' https://api.openai.com https://api.anthropic.com; " .
-            "frame-ancestors 'none'; " .
-            "base-uri 'self'; " .
+        $response->headers->set('Content-Security-Policy',
+            "default-src 'self'; ".
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; ".
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; ".
+            "font-src 'self' https://fonts.gstatic.com; ".
+            "img-src 'self' data: https:; ".
+            "connect-src 'self' https://api.openai.com https://api.anthropic.com; ".
+            "frame-ancestors 'none'; ".
+            "base-uri 'self'; ".
             "form-action 'self';"
         );
 

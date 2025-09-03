@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Middleware;
 
 use Closure;
@@ -7,34 +9,36 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
-class EnsureTenantContext
+final class EnsureTenantContext
 {
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request):Response  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             return $next($request);
         }
 
         $user = Auth::user();
 
         // Ensure user has a tenant_id and tenant is active
-        if (!$user->tenant_id || !$user->tenant || !$user->tenant->is_active) {
+        if (! $user->tenant_id || ! $user->tenant || ! $user->tenant->is_active) {
             Auth::logout();
+
             return redirect()->route('login')->withErrors([
-                'email' => 'Your account is associated with an inactive tenant.'
+                'email' => 'Your account is associated with an inactive tenant.',
             ]);
         }
 
         // Ensure user is active
-        if (!$user->is_active) {
+        if (! $user->is_active) {
             Auth::logout();
+
             return redirect()->route('login')->withErrors([
-                'email' => 'Your account has been deactivated.'
+                'email' => 'Your account has been deactivated.',
             ]);
         }
 

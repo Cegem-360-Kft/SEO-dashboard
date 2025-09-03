@@ -2,10 +2,12 @@
 
 namespace Tests;
 
-use App\Models\User;
+use App\Models\Keyword;
+use App\Models\KeywordPosition;
+use App\Models\Project;
 use App\Models\Tenant;
+use App\Models\User;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 
 abstract class TestCase extends BaseTestCase
@@ -15,13 +17,13 @@ abstract class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
-        
+
         // Ensure database is clean
         $this->artisan('migrate:fresh');
-        
+
         // Mock external services in testing
         $this->mockExternalServices();
-        
+
         // Set testing tenant context
         $this->setupTenantContext();
     }
@@ -29,7 +31,7 @@ abstract class TestCase extends BaseTestCase
     protected function tearDown(): void
     {
         $this->clearTenantContext();
-        
+
         parent::tearDown();
     }
 
@@ -68,9 +70,9 @@ abstract class TestCase extends BaseTestCase
     {
         $tenant = Tenant::factory()->create($tenantAttributes);
         $user = User::factory()->for($tenant)->create($userAttributes);
-        
+
         $this->actingAs($user);
-        
+
         return $user;
     }
 
@@ -81,7 +83,7 @@ abstract class TestCase extends BaseTestCase
     {
         $tenant = Tenant::factory()->create($tenantAttributes);
         $users = User::factory()->count($userCount)->for($tenant)->create($userAttributes);
-        
+
         return [$tenant, $users];
     }
 
@@ -91,16 +93,16 @@ abstract class TestCase extends BaseTestCase
     protected function assertTenantIsolation(User $user, string $model, array $tenantData, array $otherTenantData): void
     {
         $this->actingAs($user);
-        
-        $response = $this->getJson("/api/{$model}");
-        
+
+        $response = $this->getJson('/api/'.$model);
+
         $response->assertStatus(200);
-        
+
         // Should see tenant data
         foreach ($tenantData as $data) {
             $response->assertJsonFragment($data);
         }
-        
+
         // Should NOT see other tenant data
         foreach ($otherTenantData as $data) {
             $response->assertJsonMissing($data);
@@ -113,14 +115,14 @@ abstract class TestCase extends BaseTestCase
     protected function assertQueryCountLessThan(int $maxQueries, callable $callback): void
     {
         $queryCount = 0;
-        
-        DB::listen(function () use (&$queryCount) {
+
+        DB::listen(function () use (&$queryCount): void {
             $queryCount++;
         });
-        
+
         $callback();
-        
-        $this->assertLessThan($maxQueries, $queryCount, "Expected less than {$maxQueries} queries, but {$queryCount} were executed.");
+
+        $this->assertLessThan($maxQueries, $queryCount, sprintf('Expected less than %d queries, but %d were executed.', $maxQueries, $queryCount));
     }
 
     /**
@@ -131,10 +133,10 @@ abstract class TestCase extends BaseTestCase
         $start = microtime(true);
         $callback();
         $end = microtime(true);
-        
+
         $duration = ($end - $start) * 1000; // Convert to milliseconds
-        
-        $this->assertLessThan($maxMilliseconds, $duration, "Response took {$duration}ms, expected less than {$maxMilliseconds}ms");
+
+        $this->assertLessThan($maxMilliseconds, $duration, sprintf('Response took %sms, expected less than %dms', $duration, $maxMilliseconds));
     }
 
     /**
@@ -142,17 +144,17 @@ abstract class TestCase extends BaseTestCase
      */
     protected function createSampleSeoData(Tenant $tenant): array
     {
-        $project = \App\Models\Project::factory()->for($tenant)->create();
-        $keywords = \App\Models\Keyword::factory()->count(10)->for($project)->for($tenant)->create();
+        $project = Project::factory()->for($tenant)->create();
+        $keywords = Keyword::factory()->count(10)->for($project)->for($tenant)->create();
         $positions = [];
-        
+
         foreach ($keywords as $keyword) {
-            $positions[] = \App\Models\KeywordPosition::factory()
+            $positions[] = KeywordPosition::factory()
                 ->for($keyword)
                 ->for($tenant)
                 ->create();
         }
-        
-        return compact('project', 'keywords', 'positions');
+
+        return ['project' => $project, 'keywords' => $keywords, 'positions' => $positions];
     }
 }

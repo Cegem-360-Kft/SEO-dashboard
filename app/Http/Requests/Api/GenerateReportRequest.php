@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests\Api;
 
-use Illuminate\Foundation\Http\FormRequest;
+use App\Models\Project;
 use Carbon\Carbon;
+use Illuminate\Foundation\Http\FormRequest;
 
-class GenerateReportRequest extends FormRequest
+final class GenerateReportRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -24,27 +27,27 @@ class GenerateReportRequest extends FormRequest
             'project_id' => [
                 'required',
                 'exists:projects,id',
-                function ($attribute, $value, $fail) {
-                    $project = \App\Models\Project::find($value);
+                function ($attribute, $value, $fail): void {
+                    $project = Project::query()->find($value);
                     if ($project && $project->tenant_id !== $this->user()->tenant_id) {
                         $fail('The selected project does not belong to your organization.');
                     }
                 },
             ],
-            'title' => 'nullable|string|max:255',
-            'type' => 'required|in:daily,weekly,monthly,quarterly,yearly,custom',
-            'start_date' => 'nullable|date|before_or_equal:end_date|before_or_equal:today',
-            'end_date' => 'nullable|date|after_or_equal:start_date|before_or_equal:today',
-            'sections' => 'nullable|array',
-            'sections.*' => 'in:overview,keyword_performance,traffic_analysis,competitor_comparison,technical_seo,recommendations',
-            'format' => 'nullable|in:pdf,html,both',
-            'include_charts' => 'nullable|boolean',
-            'include_data_tables' => 'nullable|boolean',
-            'email_recipients' => 'nullable|array',
-            'email_recipients.*' => 'email',
-            'schedule_delivery' => 'nullable|boolean',
-            'delivery_time' => 'nullable|date|after:now',
-            'template' => 'nullable|in:executive_summary,detailed_analysis,competitor_focus,keyword_focus',
+            'title' => ['nullable', 'string', 'max:255'],
+            'type' => ['required', 'in:daily,weekly,monthly,quarterly,yearly,custom'],
+            'start_date' => ['nullable', 'date', 'before_or_equal:end_date', 'before_or_equal:today'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date', 'before_or_equal:today'],
+            'sections' => ['nullable', 'array'],
+            'sections.*' => ['in:overview,keyword_performance,traffic_analysis,competitor_comparison,technical_seo,recommendations'],
+            'format' => ['nullable', 'in:pdf,html,both'],
+            'include_charts' => ['nullable', 'boolean'],
+            'include_data_tables' => ['nullable', 'boolean'],
+            'email_recipients' => ['nullable', 'array'],
+            'email_recipients.*' => ['email'],
+            'schedule_delivery' => ['nullable', 'boolean'],
+            'delivery_time' => ['nullable', 'date', 'after:now'],
+            'template' => ['nullable', 'in:executive_summary,detailed_analysis,competitor_focus,keyword_focus'],
         ];
     }
 
@@ -70,52 +73,11 @@ class GenerateReportRequest extends FormRequest
     }
 
     /**
-     * Prepare the data for validation.
-     */
-    protected function prepareForValidation(): void
-    {
-        // Set default dates based on report type if not provided
-        if (!$this->start_date || !$this->end_date) {
-            $dates = $this->getDefaultDateRange($this->type);
-            
-            $this->merge([
-                'start_date' => $this->start_date ?? $dates['start'],
-                'end_date' => $this->end_date ?? $dates['end'],
-            ]);
-        }
-
-        // Set default title if not provided
-        if (!$this->title) {
-            $project = \App\Models\Project::find($this->project_id);
-            $projectName = $project ? $project->name : 'Unknown Project';
-            
-            $this->merge([
-                'title' => $this->generateDefaultTitle($this->type, $projectName),
-            ]);
-        }
-
-        // Set defaults
-        $this->merge([
-            'format' => $this->format ?? 'pdf',
-            'include_charts' => $this->include_charts ?? true,
-            'include_data_tables' => $this->include_data_tables ?? true,
-            'schedule_delivery' => $this->schedule_delivery ?? false,
-        ]);
-
-        // Set default sections based on report type
-        if (!$this->sections) {
-            $this->merge([
-                'sections' => $this->getDefaultSections($this->type),
-            ]);
-        }
-    }
-
-    /**
      * Configure the validator instance.
      */
     public function withValidator($validator): void
     {
-        $validator->after(function ($validator) {
+        $validator->after(function ($validator): void {
             // Validate date range is reasonable
             if ($this->start_date && $this->end_date) {
                 $start = Carbon::parse($this->start_date);
@@ -132,13 +94,13 @@ class GenerateReportRequest extends FormRequest
                 if ($expectedDays && abs($diffInDays - $expectedDays) > 7) {
                     $validator->errors()->add(
                         'type',
-                        "Selected date range ({$diffInDays} days) doesn't match the {$this->type} report type."
+                        sprintf("Selected date range (%s days) doesn't match the %s report type.", $diffInDays, $this->type)
                     );
                 }
             }
 
             // Validate scheduled delivery
-            if ($this->schedule_delivery && !$this->delivery_time) {
+            if ($this->schedule_delivery && ! $this->delivery_time) {
                 $validator->errors()->add('delivery_time', 'Delivery time is required when scheduling delivery.');
             }
 
@@ -160,13 +122,75 @@ class GenerateReportRequest extends FormRequest
     }
 
     /**
+     * Get validated data with computed values.
+     */
+    public function validatedWithComputed(): array
+    {
+        $validated = $this->validated();
+
+        // Add computed metadata
+        $validated['metadata'] = [
+            'requested_by' => $this->user()->id,
+            'requested_at' => now(),
+            'report_settings' => [
+                'include_charts' => $validated['include_charts'],
+                'include_data_tables' => $validated['include_data_tables'],
+                'format' => $validated['format'],
+            ],
+        ];
+
+        return $validated;
+    }
+
+    /**
+     * Prepare the data for validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        // Set default dates based on report type if not provided
+        if (! $this->start_date || ! $this->end_date) {
+            $dates = $this->getDefaultDateRange($this->type);
+
+            $this->merge([
+                'start_date' => $this->start_date ?? $dates['start'],
+                'end_date' => $this->end_date ?? $dates['end'],
+            ]);
+        }
+
+        // Set default title if not provided
+        if (! $this->title) {
+            $project = Project::query()->find($this->project_id);
+            $projectName = $project ? $project->name : 'Unknown Project';
+
+            $this->merge([
+                'title' => $this->generateDefaultTitle($this->type, $projectName),
+            ]);
+        }
+
+        // Set defaults
+        $this->merge([
+            'format' => $this->format ?? 'pdf',
+            'include_charts' => $this->include_charts ?? true,
+            'include_data_tables' => $this->include_data_tables ?? true,
+            'schedule_delivery' => $this->schedule_delivery ?? false,
+        ]);
+
+        // Set default sections based on report type
+        if (! $this->sections) {
+            $this->merge([
+                'sections' => $this->getDefaultSections($this->type),
+            ]);
+        }
+    }
+
+    /**
      * Get default date range based on report type.
      */
     private function getDefaultDateRange(string $type): array
     {
         $end = Carbon::now();
-        
-        $start = match($type) {
+
+        $start = match ($type) {
             'daily' => $end->copy()->subDay(),
             'weekly' => $end->copy()->subWeek(),
             'monthly' => $end->copy()->subMonth(),
@@ -186,7 +210,7 @@ class GenerateReportRequest extends FormRequest
      */
     private function generateDefaultTitle(string $type, string $projectName): string
     {
-        $typeLabel = match($type) {
+        $typeLabel = match ($type) {
             'daily' => 'Daily',
             'weekly' => 'Weekly',
             'monthly' => 'Monthly',
@@ -195,7 +219,7 @@ class GenerateReportRequest extends FormRequest
             default => 'Custom',
         };
 
-        return "{$typeLabel} SEO Report - {$projectName}";
+        return sprintf('%s SEO Report - %s', $typeLabel, $projectName);
     }
 
     /**
@@ -203,7 +227,7 @@ class GenerateReportRequest extends FormRequest
      */
     private function getDefaultSections(string $type): array
     {
-        return match($type) {
+        return match ($type) {
             'daily' => ['overview', 'keyword_performance'],
             'weekly' => ['overview', 'keyword_performance', 'traffic_analysis'],
             'monthly' => ['overview', 'keyword_performance', 'traffic_analysis', 'competitor_comparison', 'recommendations'],
@@ -218,7 +242,7 @@ class GenerateReportRequest extends FormRequest
      */
     private function getExpectedDaysForType(string $type): ?int
     {
-        return match($type) {
+        return match ($type) {
             'daily' => 1,
             'weekly' => 7,
             'monthly' => 30,
@@ -226,26 +250,5 @@ class GenerateReportRequest extends FormRequest
             'yearly' => 365,
             default => null,
         };
-    }
-
-    /**
-     * Get validated data with computed values.
-     */
-    public function validatedWithComputed(): array
-    {
-        $validated = $this->validated();
-        
-        // Add computed metadata
-        $validated['metadata'] = [
-            'requested_by' => $this->user()->id,
-            'requested_at' => now(),
-            'report_settings' => [
-                'include_charts' => $validated['include_charts'],
-                'include_data_tables' => $validated['include_data_tables'],
-                'format' => $validated['format'],
-            ],
-        ];
-
-        return $validated;
     }
 }

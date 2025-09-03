@@ -1,20 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use App\Models\Tenant;
+use App\Models\User;
+use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
-use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 
-class TenantRegistrationController extends Controller
+final class TenantRegistrationController extends Controller
 {
     /**
      * Register a new tenant with owner user
@@ -22,13 +24,13 @@ class TenantRegistrationController extends Controller
     public function registerTenant(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'tenant_name' => 'required|string|max:255|unique:tenants,name',
-            'tenant_slug' => 'required|string|max:255|unique:tenants,slug|alpha_dash',
-            'tenant_domain' => 'nullable|string|max:255|unique:tenants,domain',
-            'owner_name' => 'required|string|max:255',
-            'owner_email' => 'required|string|email|max:255',
-            'owner_password' => 'required|string|min:8|confirmed',
-            'plan' => 'sometimes|in:basic,professional,enterprise',
+            'tenant_name' => ['required', 'string', 'max:255', 'unique:tenants,name'],
+            'tenant_slug' => ['required', 'string', 'max:255', 'unique:tenants,slug', 'alpha_dash'],
+            'tenant_domain' => ['nullable', 'string', 'max:255', 'unique:tenants,domain'],
+            'owner_name' => ['required', 'string', 'max:255'],
+            'owner_email' => ['required', 'string', 'email', 'max:255'],
+            'owner_password' => ['required', 'string', 'min:8', 'confirmed'],
+            'plan' => ['sometimes', 'in:basic,professional,enterprise'],
         ]);
 
         if ($validator->fails()) {
@@ -36,10 +38,10 @@ class TenantRegistrationController extends Controller
         }
 
         // Check if user with this email already exists in any tenant
-        $existingUser = User::where('email', $request->owner_email)->first();
+        $existingUser = User::query()->where('email', $request->owner_email)->first();
         if ($existingUser) {
             return response()->json([
-                'errors' => ['owner_email' => ['This email is already registered.']]
+                'errors' => ['owner_email' => ['This email is already registered.']],
             ], 422);
         }
 
@@ -47,7 +49,7 @@ class TenantRegistrationController extends Controller
 
         try {
             // Create tenant
-            $tenant = Tenant::create([
+            $tenant = Tenant::query()->create([
                 'name' => $request->tenant_name,
                 'slug' => $request->tenant_slug,
                 'domain' => $request->tenant_domain,
@@ -57,7 +59,7 @@ class TenantRegistrationController extends Controller
             ]);
 
             // Create owner user
-            $owner = User::create([
+            $owner = User::query()->create([
                 'tenant_id' => $tenant->id,
                 'name' => $request->owner_name,
                 'email' => $request->owner_email,
@@ -80,15 +82,15 @@ class TenantRegistrationController extends Controller
                 'message' => 'Tenant and owner account created successfully',
                 'tenant' => $tenant,
                 'user' => $owner,
-                'redirect_url' => route('dashboard')
+                'redirect_url' => route('dashboard'),
             ], 201);
 
-        } catch (\Exception $e) {
+        } catch (Exception $exception) {
             DB::rollback();
-            
+
             return response()->json([
                 'message' => 'Registration failed',
-                'error' => $e->getMessage()
+                'error' => $exception->getMessage(),
             ], 500);
         }
     }
@@ -99,35 +101,35 @@ class TenantRegistrationController extends Controller
     public function addUserToTenant(Request $request)
     {
         $request->validate([
-            'tenant_id' => 'required|exists:tenants,id',
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255',
-            'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:admin,manager,viewer',
+            'tenant_id' => ['required', 'exists:tenants,id'],
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'role' => ['required', 'in:admin,manager,viewer'],
         ]);
 
-        $tenant = Tenant::findOrFail($request->tenant_id);
+        $tenant = Tenant::query()->findOrFail($request->tenant_id);
 
         // Check if tenant can add more users
-        if (!$tenant->canAddUsers()) {
+        if (! $tenant->canAddUsers()) {
             return response()->json([
-                'message' => 'Tenant has reached maximum user limit for current plan'
+                'message' => 'Tenant has reached maximum user limit for current plan',
             ], 403);
         }
 
         // Check if user with this email already exists in this tenant
-        $existingUser = User::where('email', $request->email)
-                          ->where('tenant_id', $tenant->id)
-                          ->first();
+        $existingUser = User::query()->where('email', $request->email)
+            ->where('tenant_id', $tenant->id)
+            ->first();
 
         if ($existingUser) {
             return response()->json([
-                'errors' => ['email' => ['User already exists in this tenant.']]
+                'errors' => ['email' => ['User already exists in this tenant.']],
             ], 422);
         }
 
         // Create user
-        $user = User::create([
+        $user = User::query()->create([
             'tenant_id' => $tenant->id,
             'name' => $request->name,
             'email' => $request->email,
@@ -143,14 +145,14 @@ class TenantRegistrationController extends Controller
 
         return response()->json([
             'message' => 'User added to tenant successfully',
-            'user' => $user->load('tenant')
+            'user' => $user->load('tenant'),
         ], 201);
     }
 
     /**
      * Setup default permissions and roles for new tenant
      */
-    protected function setupTenantPermissions(Tenant $tenant, User $owner)
+    protected function setupTenantPermissions(Tenant $tenant, User $owner): void
     {
         // Define SEO platform permissions
         $permissions = [
@@ -159,32 +161,32 @@ class TenantRegistrationController extends Controller
             'projects.create',
             'projects.edit',
             'projects.delete',
-            
+
             // Keyword management
             'keywords.view',
             'keywords.create',
             'keywords.edit',
             'keywords.delete',
             'keywords.track',
-            
+
             // Reporting
             'reports.view',
             'reports.create',
             'reports.export',
             'reports.schedule',
-            
+
             // User management
             'users.view',
             'users.create',
             'users.edit',
             'users.delete',
             'users.invite',
-            
+
             // Settings
             'settings.view',
             'settings.edit',
             'settings.integrations',
-            
+
             // API access
             'api.access',
             'api.tokens.create',
@@ -193,7 +195,7 @@ class TenantRegistrationController extends Controller
 
         // Create tenant-scoped permissions
         foreach ($permissions as $permission) {
-            Permission::firstOrCreate([
+            Permission::query()->firstOrCreate([
                 'name' => $permission,
                 'guard_name' => 'web',
                 'tenant_id' => $tenant->id,
@@ -208,14 +210,14 @@ class TenantRegistrationController extends Controller
         ]);
 
         $adminRole = Role::create([
-            'name' => 'admin', 
+            'name' => 'admin',
             'guard_name' => 'web',
             'tenant_id' => $tenant->id,
         ]);
 
         $managerRole = Role::create([
             'name' => 'manager',
-            'guard_name' => 'web', 
+            'guard_name' => 'web',
             'tenant_id' => $tenant->id,
         ]);
 
@@ -226,20 +228,20 @@ class TenantRegistrationController extends Controller
         ]);
 
         // Assign all permissions to owner
-        $ownerRole->syncPermissions(Permission::where('tenant_id', $tenant->id)->get());
+        $ownerRole->syncPermissions(Permission::query()->where('tenant_id', $tenant->id)->get());
 
         // Assign permissions to other roles
-        $adminPermissions = Permission::where('tenant_id', $tenant->id)
+        $adminPermissions = Permission::query()->where('tenant_id', $tenant->id)
             ->whereNotIn('name', ['users.delete', 'settings.integrations'])
             ->get();
         $adminRole->syncPermissions($adminPermissions);
 
-        $managerPermissions = Permission::where('tenant_id', $tenant->id)
+        $managerPermissions = Permission::query()->where('tenant_id', $tenant->id)
             ->whereNotIn('name', ['users.create', 'users.edit', 'users.delete', 'users.invite', 'settings.edit', 'settings.integrations'])
             ->get();
         $managerRole->syncPermissions($managerPermissions);
 
-        $viewerPermissions = Permission::where('tenant_id', $tenant->id)
+        $viewerPermissions = Permission::query()->where('tenant_id', $tenant->id)
             ->whereIn('name', ['projects.view', 'keywords.view', 'reports.view'])
             ->get();
         $viewerRole->syncPermissions($viewerPermissions);
@@ -251,11 +253,11 @@ class TenantRegistrationController extends Controller
     /**
      * Assign appropriate role to user
      */
-    protected function assignUserRole(User $user, string $roleName, Tenant $tenant)
+    protected function assignUserRole(User $user, string $roleName, Tenant $tenant): void
     {
-        $role = Role::where('name', $roleName)
-                   ->where('tenant_id', $tenant->id)
-                   ->first();
+        $role = Role::query()->where('name', $roleName)
+            ->where('tenant_id', $tenant->id)
+            ->first();
 
         if ($role) {
             $user->assignRole($role);

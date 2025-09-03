@@ -1,20 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
-use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Project extends Model
+final class Project extends Model
 {
-    use HasFactory, SoftDeletes, BelongsToTenant;
+    use HasFactory;
+    use SoftDeletes;
 
     protected $fillable = [
-        'tenant_id',
         'user_id',
         'name',
         'url',
@@ -43,18 +45,6 @@ class Project extends Model
         'last_positions_updated_at' => 'datetime',
     ];
 
-    protected static function boot()
-    {
-        parent::boot();
-        
-        static::creating(function ($project) {
-            // Extract domain from URL
-            if ($project->url && !$project->domain) {
-                $project->domain = parse_url($project->url, PHP_URL_HOST);
-            }
-        });
-    }
-
     // Relationships
     public function user(): BelongsTo
     {
@@ -79,17 +69,6 @@ class Project extends Model
     public function notifications(): HasMany
     {
         return $this->hasMany(Notification::class);
-    }
-
-    // Scopes
-    public function scopeActive($query)
-    {
-        return $query->where('is_active', true);
-    }
-
-    public function scopeForDomain($query, string $domain)
-    {
-        return $query->where('domain', $domain);
     }
 
     // Analytics methods
@@ -117,10 +96,10 @@ class Project extends Model
 
     public function needsPositionUpdate(): bool
     {
-        if (!$this->last_positions_updated_at) {
+        if (! $this->last_positions_updated_at) {
             return true;
         }
-        
+
         return $this->last_positions_updated_at->diffInHours(now()) >= 24;
     }
 
@@ -130,7 +109,7 @@ class Project extends Model
         $positions = $this->keywords()
             ->whereNotNull('current_position')
             ->pluck('current_position');
-            
+
         if ($positions->isEmpty()) {
             return 0.0;
         }
@@ -147,5 +126,30 @@ class Project extends Model
         }
 
         return round(($visibility / $positions->count()) * 100, 2);
+    }
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        self::creating(function ($project): void {
+            // Extract domain from URL
+            if ($project->url && ! $project->domain) {
+                $project->domain = parse_url($project->url, PHP_URL_HOST);
+            }
+        });
+    }
+
+    // Scopes
+    #[Scope]
+    protected function active($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    #[Scope]
+    protected function forDomain($query, string $domain)
+    {
+        return $query->where('domain', $domain);
     }
 }

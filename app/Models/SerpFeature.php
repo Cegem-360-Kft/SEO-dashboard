@@ -1,15 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class SerpFeature extends Model
+final class SerpFeature extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant;
+    use HasFactory;
 
     protected $fillable = [
         'tenant_id',
@@ -40,22 +44,26 @@ class SerpFeature extends Model
     }
 
     // Scopes
-    public function scopeForFeatureType($query, string $type)
+    #[Scope]
+    protected function forFeatureType($query, string $type)
     {
         return $query->where('feature_type', $type);
     }
 
-    public function scopeOwnedByUs($query)
+    #[Scope]
+    protected function ownedByUs($query)
     {
         return $query->where('is_our_domain', true);
     }
 
-    public function scopeForDate($query, $date)
+    #[Scope]
+    protected function forDate($query, $date)
     {
         return $query->where('date', $date);
     }
 
-    public function scopeForDateRange($query, $startDate, $endDate)
+    #[Scope]
+    protected function forDateRange($query, $startDate, $endDate)
     {
         return $query->whereBetween('date', [$startDate, $endDate]);
     }

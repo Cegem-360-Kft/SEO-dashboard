@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Admin\Resources\Projects;
 
 use App\Filament\Admin\Resources\Projects\Pages\CreateProject;
@@ -16,7 +18,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
-class ProjectResource extends Resource
+final class ProjectResource extends Resource
 {
     protected static ?string $model = Project::class;
 

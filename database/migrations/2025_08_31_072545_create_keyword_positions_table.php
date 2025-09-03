@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -11,7 +13,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('keyword_positions', function (Blueprint $table) {
+        Schema::create('keyword_positions', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
             $table->foreignId('keyword_id')->constrained()->cascadeOnDelete();
@@ -31,7 +33,7 @@ return new class extends Migration
             $table->text('serp_description')->nullable(); // Description as it appears in SERP
             $table->timestamp('checked_at'); // Exact time of position check
             $table->timestamps();
-            
+
             // Optimize for large datasets - this table will have millions of records
             $table->unique(['tenant_id', 'keyword_id', 'date', 'search_engine', 'device']);
             $table->index(['tenant_id', 'date']); // For tenant-wide daily reports
@@ -39,7 +41,7 @@ return new class extends Migration
             $table->index(['date', 'position']); // For position distribution analysis
             $table->index(['tenant_id', 'date', 'position']); // For dashboard queries
         });
-        
+
         // Partition by date for better performance (PostgreSQL specific)
         // This can be implemented later as the dataset grows
     }

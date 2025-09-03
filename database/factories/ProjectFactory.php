@@ -1,14 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Models\Project;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Project>
+ * @extends Factory<Project>
  */
-class ProjectFactory extends Factory
+final class ProjectFactory extends Factory
 {
     /**
      * Define the model's default state.
@@ -18,9 +20,9 @@ class ProjectFactory extends Factory
     public function definition(): array
     {
         $url = fake()->url();
-        
+
         return [
-            'name' => fake()->company() . ' SEO Project',
+            'name' => fake()->company().' SEO Project',
             'url' => $url,
             'domain' => parse_url($url, PHP_URL_HOST),
             'description' => fake()->paragraph(),
@@ -50,7 +52,7 @@ class ProjectFactory extends Factory
      */
     public function inactive(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'is_active' => false,
         ]);
     }
@@ -60,7 +62,7 @@ class ProjectFactory extends Factory
      */
     public function needsUpdate(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'last_positions_updated_at' => fake()->dateTimeBetween('-7 days', '-2 days'),
         ]);
     }
@@ -70,8 +72,8 @@ class ProjectFactory extends Factory
      */
     public function withDomain(string $domain): static
     {
-        return $this->state(fn (array $attributes) => [
-            'url' => "https://{$domain}",
+        return $this->state(fn (array $attributes): array => [
+            'url' => 'https://'.$domain,
             'domain' => $domain,
         ]);
     }
@@ -81,7 +83,7 @@ class ProjectFactory extends Factory
      */
     public function forCountries(array $countries): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'target_countries' => $countries,
         ]);
     }
@@ -91,7 +93,7 @@ class ProjectFactory extends Factory
      */
     public function withIntegrations(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'integrations' => [
                 'google_search_console' => true,
                 'google_analytics' => true,
@@ -105,7 +107,7 @@ class ProjectFactory extends Factory
      */
     public function recentlyUpdated(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'last_crawled_at' => fake()->dateTimeBetween('-1 day'),
             'last_positions_updated_at' => fake()->dateTimeBetween('-1 day'),
         ]);

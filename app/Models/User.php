@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use App\Models\Concerns\BelongsToTenant;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -14,10 +16,13 @@ use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable
+final class User extends Authenticatable implements FilamentUser
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, SoftDeletes, BelongsToTenant, HasApiTokens, HasRoles;
+    use HasApiTokens;
+    use HasFactory;
+    use HasRoles;
+    use Notifiable;
+    use SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -25,7 +30,6 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
-        'tenant_id',
         'name',
         'email',
         'password',
@@ -49,29 +53,7 @@ class User extends Authenticatable
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'preferences' => 'array',
-            'permissions' => 'array',
-            'is_active' => 'boolean',
-            'last_login_at' => 'datetime',
-        ];
-    }
-
     // Relationships
-    public function tenant(): BelongsTo
-    {
-        return $this->belongsTo(Tenant::class);
-    }
-
     public function projects(): HasMany
     {
         return $this->hasMany(Project::class);
@@ -131,6 +113,7 @@ class User extends Authenticatable
 
         // Fallback to custom permissions array
         $permissions = $this->permissions ?? [];
+
         return in_array($permission, $permissions);
     }
 
@@ -160,6 +143,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Determine if the user can access the Filament panel.
+     */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return true;
+    }
+
+    /**
      * Get the user's initials
      */
     public function initials(): string
@@ -169,5 +160,22 @@ class User extends Authenticatable
             ->take(2)
             ->map(fn ($word) => Str::substr($word, 0, 1))
             ->implode('');
+    }
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'preferences' => 'array',
+            'permissions' => 'array',
+            'is_active' => 'boolean',
+            'last_login_at' => 'datetime',
+        ];
     }
 }

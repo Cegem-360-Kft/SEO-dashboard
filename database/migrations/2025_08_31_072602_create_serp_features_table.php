@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -11,7 +13,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('serp_features', function (Blueprint $table) {
+        Schema::create('serp_features', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
             $table->foreignId('keyword_id')->constrained()->cascadeOnDelete();
@@ -30,7 +32,7 @@ return new class extends Migration
                 'reviews',
                 'sitelinks',
                 'site_search_box',
-                'top_stories'
+                'top_stories',
             ]);
             $table->integer('position')->nullable(); // Position of the feature on SERP
             $table->string('domain')->nullable(); // Domain owning the feature
@@ -40,7 +42,7 @@ return new class extends Migration
             $table->json('data')->nullable(); // Additional feature-specific data
             $table->boolean('is_our_domain')->default(false); // Whether our tracked domain owns this feature
             $table->timestamps();
-            
+
             $table->index(['tenant_id', 'date', 'feature_type']);
             $table->index(['keyword_id', 'date', 'feature_type']);
             $table->index(['tenant_id', 'feature_type', 'is_our_domain']);

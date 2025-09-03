@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Support;
 
 use Spatie\Permission\Contracts\PermissionsTeamResolver;
 
-class TenantTeamResolver implements PermissionsTeamResolver
+final class TenantTeamResolver implements PermissionsTeamResolver
 {
-    protected $teamId = null;
+    private $teamId;
 
     public function getPermissionsTeamId(): int|string|null
     {

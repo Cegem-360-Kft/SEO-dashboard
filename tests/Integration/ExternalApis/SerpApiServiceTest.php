@@ -1,27 +1,29 @@
 <?php
 
-use App\Services\SerpApiService;
-use App\Models\Project;
+declare(strict_types=1);
+
 use App\Models\Keyword;
 use App\Models\KeywordPosition;
+use App\Models\Project;
 use App\Models\Tenant;
-use Illuminate\Http\Client\Request;
+use App\Services\SerpApiService;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
-describe('SERP API Service Integration', function () {
-    let('service', fn() => new SerpApiService());
-    let('tenant', fn() => Tenant::factory()->create());
-    let('project', fn() => Project::factory()->for($this->tenant)->create());
+describe('SERP API Service Integration', function (): void {
+    let('service', fn (): SerpApiService => new SerpApiService);
+    let('tenant', fn () => Tenant::factory()->create());
+    let('project', fn () => Project::factory()->for($this->tenant)->create());
 
-    beforeEach(function () {
+    beforeEach(function (): void {
         mockExternalApis();
     });
 
-    describe('Position Tracking Integration', function () {
-        it('fetches and stores keyword positions successfully', function () {
+    describe('Position Tracking Integration', function (): void {
+        it('fetches and stores keyword positions successfully', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create([
                 'keyword' => 'seo tools',
-                'country' => 'US'
+                'country' => 'US',
             ]);
 
             // Mock successful SERP API response
@@ -29,7 +31,7 @@ describe('SERP API Service Integration', function () {
                 'serpapi.com/*' => Http::response([
                     'search_metadata' => [
                         'status' => 'Success',
-                        'total_time_taken' => 1.23
+                        'total_time_taken' => 1.23,
                     ],
                     'organic_results' => [
                         [
@@ -37,17 +39,17 @@ describe('SERP API Service Integration', function () {
                             'title' => 'Best SEO Tools 2024',
                             'link' => 'https://example.com/seo-tools',
                             'snippet' => 'Discover the best SEO tools...',
-                            'domain' => 'example.com'
+                            'domain' => 'example.com',
                         ],
                         [
                             'position' => 6,
                             'title' => 'Complete SEO Toolkit',
                             'link' => 'https://other.com/tools',
                             'snippet' => 'Everything you need for SEO...',
-                            'domain' => 'other.com'
-                        ]
-                    ]
-                ], 200)
+                            'domain' => 'other.com',
+                        ],
+                    ],
+                ], 200),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -60,18 +62,18 @@ describe('SERP API Service Integration', function () {
             $this->assertDatabaseHas('keyword_positions', [
                 'keyword_id' => $keyword->id,
                 'position' => 5,
-                'url' => 'https://example.com/seo-tools'
+                'url' => 'https://example.com/seo-tools',
             ]);
         });
 
-        it('handles API rate limiting gracefully', function () {
+        it('handles API rate limiting gracefully', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create();
 
             // Mock rate limit response
             Http::fake([
                 'serpapi.com/*' => Http::response([
-                    'error' => 'Rate limit exceeded. Please try again later.'
-                ], 429)
+                    'error' => 'Rate limit exceeded. Please try again later.',
+                ], 429),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -81,18 +83,18 @@ describe('SERP API Service Integration', function () {
 
             // Should not create position record on rate limit
             $this->assertDatabaseMissing('keyword_positions', [
-                'keyword_id' => $keyword->id
+                'keyword_id' => $keyword->id,
             ]);
         });
 
-        it('handles API errors and maintains data integrity', function () {
+        it('handles API errors and maintains data integrity', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create();
 
             // Mock API error
             Http::fake([
                 'serpapi.com/*' => Http::response([
-                    'error' => 'Invalid API key'
-                ], 401)
+                    'error' => 'Invalid API key',
+                ], 401),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -101,7 +103,7 @@ describe('SERP API Service Integration', function () {
             expect($result['error'])->toContain('Invalid API key');
         });
 
-        it('tracks multiple keywords efficiently', function () {
+        it('tracks multiple keywords efficiently', function (): void {
             $keywords = Keyword::factory()->count(5)->for($this->project)->for($this->tenant)->create();
 
             // Mock successful responses for all keywords
@@ -114,25 +116,25 @@ describe('SERP API Service Integration', function () {
                             'title' => fake()->sentence(),
                             'link' => fake()->url(),
                             'snippet' => fake()->paragraph(),
-                            'domain' => fake()->domainName()
-                        ]
-                    ]
-                ], 200)
+                            'domain' => fake()->domainName(),
+                        ],
+                    ],
+                ], 200),
             ]);
 
             $results = $this->service->trackMultipleKeywords($keywords);
 
             expect($results)->toHaveCount(5);
-            
+
             foreach ($results as $result) {
                 expect($result['status'])->toBe('success');
             }
 
             // Verify all positions were stored
-            expect(KeywordPosition::whereIn('keyword_id', $keywords->pluck('id')))->toHaveCount(5);
+            expect(KeywordPosition::query()->whereIn('keyword_id', $keywords->pluck('id')))->toHaveCount(5);
         });
 
-        it('handles partial failures in batch operations', function () {
+        it('handles partial failures in batch operations', function (): void {
             $keywords = Keyword::factory()->count(3)->for($this->project)->for($this->tenant)->create();
 
             // Mock mixed responses
@@ -140,7 +142,7 @@ describe('SERP API Service Integration', function () {
                 'serpapi.com/*' => Http::sequence()
                     ->push(['organic_results' => [['position' => 10]]], 200) // Success
                     ->push(['error' => 'Invalid query'], 400)                  // Error
-                    ->push(['organic_results' => [['position' => 15]]], 200)  // Success
+                    ->push(['organic_results' => [['position' => 15]]], 200),  // Success
             ]);
 
             $results = $this->service->trackMultipleKeywords($keywords);
@@ -152,12 +154,12 @@ describe('SERP API Service Integration', function () {
             expect($errorCount)->toBe(1);
 
             // Verify only successful positions were stored
-            expect(KeywordPosition::whereIn('keyword_id', $keywords->pluck('id')))->toHaveCount(2);
+            expect(KeywordPosition::query()->whereIn('keyword_id', $keywords->pluck('id')))->toHaveCount(2);
         });
     });
 
-    describe('SERP Features Detection', function () {
-        it('detects and stores featured snippets', function () {
+    describe('SERP Features Detection', function (): void {
+        it('detects and stores featured snippets', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create();
 
             Http::fake([
@@ -166,16 +168,16 @@ describe('SERP API Service Integration', function () {
                         'type' => 'featured_snippet',
                         'title' => 'What is SEO?',
                         'snippet' => 'SEO stands for Search Engine Optimization...',
-                        'link' => 'https://example.com/what-is-seo'
+                        'link' => 'https://example.com/what-is-seo',
                     ],
                     'organic_results' => [
                         [
                             'position' => 1,
                             'title' => 'Complete SEO Guide',
-                            'link' => 'https://example.com/seo-guide'
-                        ]
-                    ]
-                ], 200)
+                            'link' => 'https://example.com/seo-guide',
+                        ],
+                    ],
+                ], 200),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -185,13 +187,13 @@ describe('SERP API Service Integration', function () {
             // Verify SERP feature was stored
             $this->assertDatabaseHas('serp_features', [
                 'keyword_id' => $keyword->id,
-                'feature_type' => 'featured_snippet'
+                'feature_type' => 'featured_snippet',
             ]);
         });
 
-        it('detects local pack results', function () {
+        it('detects local pack results', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create([
-                'keyword' => 'restaurants near me'
+                'keyword' => 'restaurants near me',
             ]);
 
             Http::fake([
@@ -202,11 +204,11 @@ describe('SERP API Service Integration', function () {
                             'title' => 'Best Restaurant',
                             'address' => '123 Main St',
                             'rating' => 4.5,
-                            'reviews' => 250
-                        ]
+                            'reviews' => 250,
+                        ],
                     ],
-                    'organic_results' => []
-                ], 200)
+                    'organic_results' => [],
+                ], 200),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -215,30 +217,30 @@ describe('SERP API Service Integration', function () {
 
             $this->assertDatabaseHas('serp_features', [
                 'keyword_id' => $keyword->id,
-                'feature_type' => 'local_pack'
+                'feature_type' => 'local_pack',
             ]);
         });
 
-        it('detects image packs and video results', function () {
+        it('detects image packs and video results', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create();
 
             Http::fake([
                 'serpapi.com/*' => Http::response([
                     'images_results' => [
                         ['title' => 'SEO Image 1'],
-                        ['title' => 'SEO Image 2']
+                        ['title' => 'SEO Image 2'],
                     ],
                     'video_results' => [
                         [
                             'title' => 'SEO Tutorial Video',
                             'link' => 'https://youtube.com/watch?v=123',
-                            'duration' => '15:30'
-                        ]
+                            'duration' => '15:30',
+                        ],
                     ],
                     'organic_results' => [
-                        ['position' => 1, 'title' => 'SEO Guide']
-                    ]
-                ], 200)
+                        ['position' => 1, 'title' => 'SEO Guide'],
+                    ],
+                ], 200),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -248,25 +250,25 @@ describe('SERP API Service Integration', function () {
         });
     });
 
-    describe('API Configuration and Error Handling', function () {
-        it('validates API key configuration', function () {
+    describe('API Configuration and Error Handling', function (): void {
+        it('validates API key configuration', function (): void {
             config(['services.serp_api.key' => null]);
 
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create();
 
-            expect(function () use ($keyword) {
+            expect(function () use ($keyword): void {
                 $this->service->trackKeywordPosition($keyword);
-            })->toThrow(\Exception::class, 'SERP API key not configured');
+            })->toThrow(Exception::class, 'SERP API key not configured');
         });
 
-        it('handles network timeouts gracefully', function () {
+        it('handles network timeouts gracefully', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create();
 
             // Mock timeout
             Http::fake([
-                'serpapi.com/*' => function () {
-                    throw new \Illuminate\Http\Client\ConnectionException('Connection timeout');
-                }
+                'serpapi.com/*' => function (): void {
+                    throw new ConnectionException('Connection timeout');
+                },
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -275,11 +277,11 @@ describe('SERP API Service Integration', function () {
             expect($result['retry'])->toBeTrue();
         });
 
-        it('handles malformed API responses', function () {
+        it('handles malformed API responses', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create();
 
             Http::fake([
-                'serpapi.com/*' => Http::response('Invalid JSON response', 200)
+                'serpapi.com/*' => Http::response('Invalid JSON response', 200),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -288,31 +290,31 @@ describe('SERP API Service Integration', function () {
             expect($result['error'])->toContain('Invalid response format');
         });
 
-        it('respects API usage limits', function () {
+        it('respects API usage limits', function (): void {
             $keywords = Keyword::factory()->count(1000)->for($this->project)->for($this->tenant)->create();
 
             // Mock responses
             Http::fake([
-                'serpapi.com/*' => Http::response(['organic_results' => []], 200)
+                'serpapi.com/*' => Http::response(['organic_results' => []], 200),
             ]);
 
             $results = $this->service->trackMultipleKeywords($keywords, [
                 'batch_size' => 100,
-                'delay' => 1 // 1 second delay between batches
+                'delay' => 1, // 1 second delay between batches
             ]);
 
             // Should process in batches with delays
             expect($results)->toHaveCount(1000);
-            
+
             // Verify API was called with proper rate limiting
             Http::assertSentCount(1000);
         });
     });
 
-    describe('Data Accuracy and Validation', function () {
-        it('validates position data accuracy', function () {
+    describe('Data Accuracy and Validation', function (): void {
+        it('validates position data accuracy', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create([
-                'keyword' => 'example seo tool'
+                'keyword' => 'example seo tool',
             ]);
 
             Http::fake([
@@ -323,10 +325,10 @@ describe('SERP API Service Integration', function () {
                             'title' => 'Example SEO Tool - Best Solution',
                             'link' => 'https://example.com/seo-tool',
                             'snippet' => 'Our SEO tool helps you...',
-                            'domain' => 'example.com'
-                        ]
-                    ]
-                ], 200)
+                            'domain' => 'example.com',
+                        ],
+                    ],
+                ], 200),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -337,20 +339,20 @@ describe('SERP API Service Integration', function () {
             expect($result['title'])->toContain('Example SEO Tool');
 
             // Verify stored data matches API response
-            $position = KeywordPosition::where('keyword_id', $keyword->id)->first();
+            $position = KeywordPosition::query()->where('keyword_id', $keyword->id)->first();
             expect($position->position)->toBe(3);
             expect($position->url)->toBe('https://example.com/seo-tool');
         });
 
-        it('handles position changes correctly', function () {
+        it('handles position changes correctly', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create([
-                'current_position' => 10
+                'current_position' => 10,
             ]);
 
             // Create historical position
             KeywordPosition::factory()->for($keyword)->for($this->tenant)->create([
                 'position' => 10,
-                'date' => now()->subDay()->format('Y-m-d')
+                'date' => now()->subDay()->format('Y-m-d'),
             ]);
 
             Http::fake([
@@ -359,10 +361,10 @@ describe('SERP API Service Integration', function () {
                         [
                             'position' => 5,
                             'title' => 'Improved Ranking',
-                            'link' => 'https://example.com/improved'
-                        ]
-                    ]
-                ], 200)
+                            'link' => 'https://example.com/improved',
+                        ],
+                    ],
+                ], 200),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -376,7 +378,7 @@ describe('SERP API Service Integration', function () {
             expect($keyword->previous_position)->toBe(10);
         });
 
-        it('handles non-ranking keywords correctly', function () {
+        it('handles non-ranking keywords correctly', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create();
 
             Http::fake([
@@ -385,10 +387,10 @@ describe('SERP API Service Integration', function () {
                         // No results containing the target domain
                         [
                             'position' => 1,
-                            'domain' => 'competitor.com'
-                        ]
-                    ]
-                ], 200)
+                            'domain' => 'competitor.com',
+                        ],
+                    ],
+                ], 200),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -399,21 +401,21 @@ describe('SERP API Service Integration', function () {
             // Should still create position record with null position
             $this->assertDatabaseHas('keyword_positions', [
                 'keyword_id' => $keyword->id,
-                'position' => null
+                'position' => null,
             ]);
         });
     });
 
-    describe('Performance and Scalability', function () {
-        it('processes large keyword sets efficiently', function () {
+    describe('Performance and Scalability', function (): void {
+        it('processes large keyword sets efficiently', function (): void {
             $keywords = Keyword::factory()->count(50)->for($this->project)->for($this->tenant)->create();
 
             Http::fake([
                 'serpapi.com/*' => Http::response([
                     'organic_results' => [
-                        ['position' => fake()->numberBetween(1, 100)]
-                    ]
-                ], 200)
+                        ['position' => fake()->numberBetween(1, 100)],
+                    ],
+                ], 200),
             ]);
 
             $startTime = microtime(true);
@@ -426,13 +428,13 @@ describe('SERP API Service Integration', function () {
             expect($duration)->toBeLessThan(10000); // Should complete within 10 seconds
         });
 
-        it('handles concurrent API requests safely', function () {
+        it('handles concurrent API requests safely', function (): void {
             $keywords = Keyword::factory()->count(10)->for($this->project)->for($this->tenant)->create();
 
             Http::fake([
                 'serpapi.com/*' => Http::response([
-                    'organic_results' => [['position' => 1]]
-                ], 200)
+                    'organic_results' => [['position' => 1]],
+                ], 200),
             ]);
 
             // Simulate concurrent processing
@@ -446,24 +448,24 @@ describe('SERP API Service Integration', function () {
             });
 
             expect($results)->toHaveCount(10);
-            
+
             // Verify no data corruption occurred
-            expect(KeywordPosition::count())->toBe(10);
+            expect(KeywordPosition::query()->count())->toBe(10);
         });
     });
 
-    describe('Monitoring and Logging', function () {
-        it('logs API usage and performance metrics', function () {
+    describe('Monitoring and Logging', function (): void {
+        it('logs API usage and performance metrics', function (): void {
             $keyword = Keyword::factory()->for($this->project)->for($this->tenant)->create();
 
             Http::fake([
                 'serpapi.com/*' => Http::response([
                     'search_metadata' => [
                         'total_time_taken' => 1.25,
-                        'credits_used' => 1
+                        'credits_used' => 1,
                     ],
-                    'organic_results' => [['position' => 5]]
-                ], 200)
+                    'organic_results' => [['position' => 5]],
+                ], 200),
             ]);
 
             $result = $this->service->trackKeywordPosition($keyword);
@@ -473,20 +475,20 @@ describe('SERP API Service Integration', function () {
             expect($result['credits_used'])->toBe(1);
         });
 
-        it('tracks API quota usage', function () {
+        it('tracks API quota usage', function (): void {
             $keywords = Keyword::factory()->count(5)->for($this->project)->for($this->tenant)->create();
 
             Http::fake([
                 'serpapi.com/*' => Http::response([
                     'search_metadata' => ['credits_used' => 1],
-                    'organic_results' => []
-                ], 200)
+                    'organic_results' => [],
+                ], 200),
             ]);
 
             $this->service->trackMultipleKeywords($keywords);
 
             $quotaUsage = $this->service->getCurrentQuotaUsage();
-            
+
             expect($quotaUsage['used_today'])->toBe(5);
             expect($quotaUsage['remaining'])->toBeGreaterThan(0);
         });

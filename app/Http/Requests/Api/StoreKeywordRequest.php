@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests\Api;
 
+use App\Models\Project;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class StoreKeywordRequest extends FormRequest
+final class StoreKeywordRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
@@ -24,8 +27,8 @@ class StoreKeywordRequest extends FormRequest
             'project_id' => [
                 'required',
                 'exists:projects,id',
-                function ($attribute, $value, $fail) {
-                    $project = \App\Models\Project::find($value);
+                function ($attribute, $value, $fail): void {
+                    $project = Project::query()->find($value);
                     if ($project && $project->tenant_id !== $this->user()->tenant_id) {
                         $fail('The selected project does not belong to your organization.');
                     }
@@ -40,13 +43,13 @@ class StoreKeywordRequest extends FormRequest
                     return $query->where('project_id', $this->project_id);
                 }),
             ],
-            'search_volume' => 'nullable|integer|min:0|max:10000000',
-            'location' => 'nullable|string|max:255',
-            'device' => 'nullable|in:desktop,mobile,tablet',
-            'language' => 'nullable|string|max:10',
-            'is_active' => 'nullable|boolean',
-            'tags' => 'nullable|array',
-            'tags.*' => 'string|max:50',
+            'search_volume' => ['nullable', 'integer', 'min:0', 'max:10000000'],
+            'location' => ['nullable', 'string', 'max:255'],
+            'device' => ['nullable', 'in:desktop,mobile,tablet'],
+            'language' => ['nullable', 'string', 'max:10'],
+            'is_active' => ['nullable', 'boolean'],
+            'tags' => ['nullable', 'array'],
+            'tags.*' => ['string', 'max:50'],
         ];
     }
 
@@ -71,34 +74,11 @@ class StoreKeywordRequest extends FormRequest
     }
 
     /**
-     * Prepare the data for validation.
-     */
-    protected function prepareForValidation(): void
-    {
-        // Clean and normalize the keyword term
-        if ($this->term) {
-            $cleanTerm = trim(strtolower($this->term));
-            // Remove extra whitespace
-            $cleanTerm = preg_replace('/\s+/', ' ', $cleanTerm);
-            
-            $this->merge([
-                'term' => $cleanTerm
-            ]);
-        }
-
-        // Set default values
-        $this->merge([
-            'is_active' => $this->is_active ?? true,
-            'device' => $this->device ?? 'desktop',
-        ]);
-    }
-
-    /**
      * Configure the validator instance.
      */
     public function withValidator($validator): void
     {
-        $validator->after(function ($validator) {
+        $validator->after(function ($validator): void {
             // Additional validation for keyword term format
             if ($this->term) {
                 // Check for invalid characters
@@ -121,5 +101,28 @@ class StoreKeywordRequest extends FormRequest
                 }
             }
         });
+    }
+
+    /**
+     * Prepare the data for validation.
+     */
+    protected function prepareForValidation(): void
+    {
+        // Clean and normalize the keyword term
+        if ($this->term) {
+            $cleanTerm = mb_trim(mb_strtolower($this->term));
+            // Remove extra whitespace
+            $cleanTerm = preg_replace('/\s+/', ' ', $cleanTerm);
+
+            $this->merge([
+                'term' => $cleanTerm,
+            ]);
+        }
+
+        // Set default values
+        $this->merge([
+            'is_active' => $this->is_active ?? true,
+            'device' => $this->device ?? 'desktop',
+        ]);
     }
 }

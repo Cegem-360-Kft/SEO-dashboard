@@ -1,21 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Admin\Widgets;
 
 use App\Models\Keyword;
-use App\Models\Notification;
-use Filament\Tables;
+use Filament\Tables\Actions\Action;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
-use Illuminate\Database\Eloquent\Builder;
 
-class RecentAlertsWidget extends BaseWidget
+final class RecentAlertsWidget extends BaseWidget
 {
     protected static ?string $heading = 'Recent Position Changes';
 
     protected static ?int $sort = 4;
 
-    protected int | string | array $columnSpan = 'full';
+    protected int|string|array $columnSpan = 'full';
 
     public function table(Table $table): Table
     {
@@ -31,45 +32,45 @@ class RecentAlertsWidget extends BaseWidget
                     ->limit(10)
             )
             ->columns([
-                Tables\Columns\TextColumn::make('keyword')
+                TextColumn::make('keyword')
                     ->limit(40)
                     ->searchable()
                     ->weight('bold'),
-                
-                Tables\Columns\TextColumn::make('project.name')
+
+                TextColumn::make('project.name')
                     ->label('Project')
                     ->badge()
                     ->color('info'),
-                
-                Tables\Columns\TextColumn::make('previous_position')
+
+                TextColumn::make('previous_position')
                     ->label('From')
                     ->badge()
                     ->color('gray'),
-                
-                Tables\Columns\TextColumn::make('current_position')
+
+                TextColumn::make('current_position')
                     ->label('To')
                     ->badge()
-                    ->color(fn ($record) => match(true) {
+                    ->color(fn ($record): string => match (true) {
                         $record->current_position <= 3 => 'success',
                         $record->current_position <= 10 => 'warning',
                         $record->current_position <= 20 => 'info',
                         default => 'danger'
                     }),
-                
-                Tables\Columns\TextColumn::make('position_change')
+
+                TextColumn::make('position_change')
                     ->label('Change')
-                    ->getStateUsing(fn (Keyword $record) => $record->getPositionChange())
+                    ->getStateUsing(fn (Keyword $record): int => $record->getPositionChange())
                     ->badge()
-                    ->color(fn ($state) => $state > 0 ? 'success' : 'danger')
-                    ->formatStateUsing(fn ($state) => $state > 0 ? '+' . $state : (string) $state)
-                    ->icon(fn ($state) => $state > 0 ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down'),
-                
-                Tables\Columns\TextColumn::make('position_last_updated')
+                    ->color(fn ($state): string => $state > 0 ? 'success' : 'danger')
+                    ->formatStateUsing(fn ($state): string => $state > 0 ? '+'.$state : (string) $state)
+                    ->icon(fn ($state): string => $state > 0 ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down'),
+
+                TextColumn::make('position_last_updated')
                     ->label('Updated')
                     ->date()
                     ->sortable(),
-                
-                Tables\Columns\TextColumn::make('priority')
+
+                TextColumn::make('priority')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'low' => 'gray',
@@ -79,10 +80,10 @@ class RecentAlertsWidget extends BaseWidget
                     }),
             ])
             ->actions([
-                Tables\Actions\Action::make('view')
+                Action::make('view')
                     ->label('View')
                     ->icon('heroicon-m-eye')
-                    ->url(fn (Keyword $record): string => '/admin/keywords/' . $record->id)
+                    ->url(fn (Keyword $record): string => '/admin/keywords/'.$record->id)
                     ->openUrlInNewTab(),
             ])
             ->emptyStateHeading('No Significant Changes')

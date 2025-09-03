@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Models\Tenant;
@@ -7,9 +9,9 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Tenant>
+ * @extends Factory<Tenant>
  */
-class TenantFactory extends Factory
+final class TenantFactory extends Factory
 {
     /**
      * Define the model's default state.
@@ -19,7 +21,7 @@ class TenantFactory extends Factory
     public function definition(): array
     {
         $name = fake()->company();
-        
+
         return [
             'uuid' => Str::uuid(),
             'name' => $name,
@@ -51,7 +53,7 @@ class TenantFactory extends Factory
      */
     public function onTrial(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'plan' => 'free',
             'trial_ends_at' => fake()->dateTimeBetween('+1 day', '+30 days'),
             'subscription_ends_at' => null,
@@ -63,7 +65,7 @@ class TenantFactory extends Factory
      */
     public function expiredTrial(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'plan' => 'free',
             'trial_ends_at' => fake()->dateTimeBetween('-30 days', '-1 day'),
             'subscription_ends_at' => null,
@@ -75,7 +77,7 @@ class TenantFactory extends Factory
      */
     public function subscribed(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'plan' => fake()->randomElement(['starter', 'professional', 'enterprise']),
             'trial_ends_at' => fake()->optional()->dateTimeBetween('-60 days', '-30 days'),
             'subscription_ends_at' => fake()->dateTimeBetween('+30 days', '+1 year'),
@@ -87,7 +89,7 @@ class TenantFactory extends Factory
      */
     public function inactive(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'is_active' => false,
         ]);
     }
@@ -106,7 +108,7 @@ class TenantFactory extends Factory
 
         $planLimits = $limits[$plan] ?? $limits['free'];
 
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'plan' => $plan,
             'max_projects' => $planLimits['projects'],
             'max_keywords' => $planLimits['keywords'],
@@ -119,7 +121,7 @@ class TenantFactory extends Factory
      */
     public function withLimits(int $projects, int $keywords, int $users): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'max_projects' => $projects,
             'max_keywords' => $keywords,
             'max_users' => $users,

@@ -1,9 +1,16 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Auth;
+declare(strict_types=1);
 
-Route::get('/', function () {
+use App\Models\User;
+use Illuminate\Contracts\View\Factory;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Routing\Redirector;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/', function (): View|Factory {
     return view('welcome');
 });
 
@@ -13,34 +20,35 @@ Route::get('/test', function () {
         'php_version' => phpversion(),
         'laravel_version' => app()->version(),
         'memory_usage' => memory_get_usage(true),
-        'time' => now()->toISOString()
+        'time' => now()->toISOString(),
     ]);
 });
 
 Route::get('/debug', function () {
     try {
-        $user = \App\Models\User::first();
+        $user = User::query()->first();
+
         return response()->json([
             'database' => 'OK',
-            'users_count' => \App\Models\User::count(),
-            'first_user' => $user ? $user->email : 'No users'
+            'users_count' => User::query()->count(),
+            'first_user' => $user ? $user->email : 'No users',
         ]);
-    } catch (\Exception $e) {
+    } catch (Exception $exception) {
         return response()->json([
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+            'error' => $exception->getMessage(),
+            'trace' => $exception->getTraceAsString(),
         ], 500);
     }
 });
 
-Route::get('/simple-login', function () {
+Route::get('/simple-login', function (): View|Factory {
     return view('simple-login');
 });
 
 Route::post('/simple-login', function () {
     $credentials = request()->validate([
-        'email' => 'required|email',
-        'password' => 'required',
+        'email' => ['required', 'email'],
+        'password' => ['required'],
     ]);
 
     if (Auth::attempt($credentials)) {
@@ -50,24 +58,27 @@ Route::post('/simple-login', function () {
     return back()->with('error', 'Invalid credentials');
 });
 
-Route::get('/simple-logout', function () {
+Route::get('/simple-logout', function (): Redirector|RedirectResponse {
     Auth::logout();
+
     return redirect('/simple-login');
 });
 
-Route::get('/js-debug', function () {
+Route::get('/js-debug', function (): View|Factory {
     return view('js-debug');
 });
 
 Route::get('/test-login', function () {
-    $user = \App\Models\User::where('email', 'admin@seodashboard.local')->first();
+    $user = User::query()->where('email', 'admin@seodashboard.local')->first();
     if ($user) {
         Auth::login($user);
+
         return response()->json([
             'status' => 'logged_in',
             'user' => $user->email,
-            'admin_url' => url('/admin')
+            'admin_url' => url('/admin'),
         ]);
     }
+
     return response()->json(['error' => 'User not found'], 404);
 });

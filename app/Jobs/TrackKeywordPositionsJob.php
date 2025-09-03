@@ -1,11 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Jobs;
 
-use App\Models\Project;
 use App\Models\Keyword;
-use App\Services\SerpTrackingService;
+use App\Models\KeywordPosition;
+use App\Models\Project;
 use App\Services\NotificationService;
+use App\Services\SerpTrackingService;
+use DateTimeImmutable;
+use Exception;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -13,14 +18,19 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Exception;
 
-class TrackKeywordPositionsJob implements ShouldQueue
+final class TrackKeywordPositionsJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
-    public int $timeout = 300; // 5 minutes
+    public int $timeout = 300;
+
+    // 5 minutes
     public int $maxExceptions = 3;
+
     public int $backoff = 30;
 
     /**
@@ -33,7 +43,7 @@ class TrackKeywordPositionsJob implements ShouldQueue
     ) {
         // Set queue based on project priority or size
         $keywordCount = $keywords?->count() ?? $project->keywords()->where('is_active', true)->count();
-        
+
         if ($keywordCount > 100) {
             $this->onQueue('long-running');
         } elseif ($keywordCount > 50) {
@@ -49,7 +59,7 @@ class TrackKeywordPositionsJob implements ShouldQueue
     public function handle(SerpTrackingService $serpService, NotificationService $notificationService): void
     {
         try {
-            Log::info("Starting position tracking for project: {$this->project->name}", [
+            Log::info('Starting position tracking for project: '.$this->project->name, [
                 'project_id' => $this->project->id,
                 'tenant_id' => $this->project->tenant_id,
             ]);
@@ -62,7 +72,8 @@ class TrackKeywordPositionsJob implements ShouldQueue
                 ->get();
 
             if ($keywords->isEmpty()) {
-                Log::warning("No active keywords found for project: {$this->project->name}");
+                Log::warning('No active keywords found for project: '.$this->project->name);
+
                 return;
             }
 
@@ -70,22 +81,22 @@ class TrackKeywordPositionsJob implements ShouldQueue
             $failed = 0;
             $alerts = [];
             $batchSize = 10; // Process in batches to respect rate limits
-            
+
             // Process keywords in batches
             foreach ($keywords->chunk($batchSize) as $batch) {
                 foreach ($batch as $keyword) {
                     try {
                         $previousPosition = $keyword->latest_position;
                         $position = $serpService->trackKeywordPosition($keyword);
-                        
-                        if ($position) {
+
+                        if ($position instanceof KeywordPosition) {
                             $tracked++;
-                            
+
                             // Check for significant position changes for alerts
                             if ($this->sendAlerts && $previousPosition) {
                                 $change = $previousPosition - $position->position;
                                 $alert = $this->checkForPositionAlert($keyword, $previousPosition, $position->position, $change);
-                                
+
                                 if ($alert) {
                                     $alerts[] = $alert;
                                 }
@@ -93,16 +104,16 @@ class TrackKeywordPositionsJob implements ShouldQueue
                         } else {
                             $failed++;
                         }
-                        
+
                     } catch (Exception $e) {
                         $failed++;
-                        Log::error("Failed to track position for keyword: {$keyword->term}", [
+                        Log::error('Failed to track position for keyword: '.$keyword->term, [
                             'keyword_id' => $keyword->id,
                             'error' => $e->getMessage(),
                         ]);
                     }
                 }
-                
+
                 // Rate limiting between batches (SERP APIs often have strict limits)
                 if ($keywords->count() > $batchSize) {
                     sleep(2); // 2 second delay between batches
@@ -110,7 +121,7 @@ class TrackKeywordPositionsJob implements ShouldQueue
             }
 
             // Send alerts if any significant changes were detected
-            if (!empty($alerts) && $this->sendAlerts) {
+            if ($alerts !== [] && $this->sendAlerts) {
                 $this->sendPositionAlerts($alerts, $notificationService);
             }
 
@@ -118,7 +129,7 @@ class TrackKeywordPositionsJob implements ShouldQueue
             $this->project->update(['last_tracked_at' => now()]);
 
             // Log completion
-            Log::info("Position tracking completed for project: {$this->project->name}", [
+            Log::info('Position tracking completed for project: '.$this->project->name, [
                 'project_id' => $this->project->id,
                 'total_keywords' => $keywords->count(),
                 'tracked' => $tracked,
@@ -130,22 +141,68 @@ class TrackKeywordPositionsJob implements ShouldQueue
             if ($tracked > 0) {
                 // Calculate project metrics after tracking
                 UpdateProjectMetricsJob::dispatch($this->project)->delay(now()->addMinutes(5));
-                
+
                 // Generate automatic reports if scheduled
                 if ($this->shouldGenerateReport()) {
                     GenerateScheduledReportsJob::dispatch($this->project)->delay(now()->addMinutes(10));
                 }
             }
 
+        } catch (Exception $exception) {
+            Log::error('Position tracking job failed for project: '.$this->project->name, [
+                'project_id' => $this->project->id,
+                'error' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            throw $exception; // Re-throw to trigger retry mechanism
+        }
+    }
+
+    /**
+     * Handle job failure
+     */
+    public function failed(Exception $exception): void
+    {
+        Log::error('Position tracking job permanently failed', [
+            'project_id' => $this->project->id,
+            'project_name' => $this->project->name,
+            'exception' => $exception->getMessage(),
+            'attempts' => $this->attempts(),
+        ]);
+
+        // Notify project administrators of the failure
+        try {
+            $notificationService = app(NotificationService::class);
+            $notificationService->sendPositionAlert($this->project, [
+                'type' => 'system_error',
+                'priority' => 'high',
+                'title' => 'Position Tracking Failed',
+                'message' => sprintf('Automated position tracking failed for %s. Please check your configuration.', $this->project->name),
+                'error' => $exception->getMessage(),
+            ]);
         } catch (Exception $e) {
-            Log::error("Position tracking job failed for project: {$this->project->name}", [
+            Log::error('Failed to send failure notification', [
                 'project_id' => $this->project->id,
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
-            
-            throw $e; // Re-throw to trigger retry mechanism
         }
+    }
+
+    /**
+     * Calculate the number of seconds to wait before retrying the job.
+     */
+    public function backoff(): array
+    {
+        return [30, 120, 300]; // 30 seconds, 2 minutes, 5 minutes
+    }
+
+    /**
+     * Determine if the job should be retried based on the exception.
+     */
+    public function retryUntil(): DateTimeImmutable
+    {
+        return now()->addMinutes(30); // Give up after 30 minutes
     }
 
     /**
@@ -161,7 +218,7 @@ class TrackKeywordPositionsJob implements ShouldQueue
         // Check for significant improvements
         if ($change > $significantChange) {
             $priority = $change > $majorChange ? 'high' : 'medium';
-            
+
             return [
                 'keyword' => $keyword,
                 'type' => 'improvement',
@@ -169,15 +226,15 @@ class TrackKeywordPositionsJob implements ShouldQueue
                 'previous_position' => $previousPosition,
                 'new_position' => $newPosition,
                 'change' => $change,
-                'title' => "Keyword Improvement: {$keyword->term}",
-                'message' => "'{$keyword->term}' improved by {$change} positions (from {$previousPosition} to {$newPosition})",
+                'title' => 'Keyword Improvement: '.$keyword->term,
+                'message' => sprintf("'%s' improved by %d positions (from %d to %d)", $keyword->term, $change, $previousPosition, $newPosition),
             ];
         }
 
         // Check for significant declines
         if ($change < -$significantChange) {
             $priority = $change < -$majorChange ? 'high' : 'medium';
-            
+
             return [
                 'keyword' => $keyword,
                 'type' => 'decline',
@@ -185,8 +242,8 @@ class TrackKeywordPositionsJob implements ShouldQueue
                 'previous_position' => $previousPosition,
                 'new_position' => $newPosition,
                 'change' => $change,
-                'title' => "Keyword Decline: {$keyword->term}",
-                'message' => "'{$keyword->term}' declined by " . abs($change) . " positions (from {$previousPosition} to {$newPosition})",
+                'title' => 'Keyword Decline: '.$keyword->term,
+                'message' => sprintf("'%s' declined by ", $keyword->term).abs($change).sprintf(' positions (from %d to %d)', $previousPosition, $newPosition),
             ];
         }
 
@@ -194,7 +251,7 @@ class TrackKeywordPositionsJob implements ShouldQueue
         if (($previousPosition <= 10 || $newPosition <= 10) && abs($change) >= $topPositionChange) {
             $type = $change > 0 ? 'improvement' : 'decline';
             $verb = $change > 0 ? 'improved' : 'declined';
-            
+
             return [
                 'keyword' => $keyword,
                 'type' => $type,
@@ -202,8 +259,8 @@ class TrackKeywordPositionsJob implements ShouldQueue
                 'previous_position' => $previousPosition,
                 'new_position' => $newPosition,
                 'change' => $change,
-                'title' => "Top 10 Position Change: {$keyword->term}",
-                'message' => "'{$keyword->term}' {$verb} by " . abs($change) . " positions in the top 10 (from {$previousPosition} to {$newPosition})",
+                'title' => 'Top 10 Position Change: '.$keyword->term,
+                'message' => sprintf("'%s' %s by ", $keyword->term, $verb).abs($change).sprintf(' positions in the top 10 (from %d to %d)', $previousPosition, $newPosition),
             ];
         }
 
@@ -216,8 +273,8 @@ class TrackKeywordPositionsJob implements ShouldQueue
                 'previous_position' => $previousPosition,
                 'new_position' => $newPosition,
                 'change' => $change,
-                'title' => "Entered Top 10: {$keyword->term}",
-                'message' => "'{$keyword->term}' entered the top 10 at position {$newPosition}",
+                'title' => 'Entered Top 10: '.$keyword->term,
+                'message' => sprintf("'%s' entered the top 10 at position %d", $keyword->term, $newPosition),
             ];
         }
 
@@ -229,8 +286,8 @@ class TrackKeywordPositionsJob implements ShouldQueue
                 'previous_position' => $previousPosition,
                 'new_position' => $newPosition,
                 'change' => $change,
-                'title' => "Left Top 10: {$keyword->term}",
-                'message' => "'{$keyword->term}' dropped out of the top 10 to position {$newPosition}",
+                'title' => 'Left Top 10: '.$keyword->term,
+                'message' => sprintf("'%s' dropped out of the top 10 to position %d", $keyword->term, $newPosition),
             ];
         }
 
@@ -244,11 +301,11 @@ class TrackKeywordPositionsJob implements ShouldQueue
     {
         try {
             // Group alerts by type and priority
-            $groupedAlerts = collect($alerts)->groupBy(function ($alert) {
-                return $alert['type'] . '_' . $alert['priority'];
+            $groupedAlerts = collect($alerts)->groupBy(function (array $alert): string {
+                return $alert['type'].'_'.$alert['priority'];
             });
 
-            foreach ($groupedAlerts as $group => $alertGroup) {
+            foreach ($groupedAlerts as $alertGroup) {
                 // For multiple alerts of the same type, create a summary
                 if ($alertGroup->count() > 1) {
                     $this->sendBatchAlert($alertGroup, $notificationService);
@@ -257,10 +314,10 @@ class TrackKeywordPositionsJob implements ShouldQueue
                 }
             }
 
-        } catch (Exception $e) {
-            Log::error("Failed to send position alerts", [
+        } catch (Exception $exception) {
+            Log::error('Failed to send position alerts', [
                 'project_id' => $this->project->id,
-                'error' => $e->getMessage(),
+                'error' => $exception->getMessage(),
             ]);
         }
     }
@@ -280,14 +337,14 @@ class TrackKeywordPositionsJob implements ShouldQueue
     {
         $first = $alerts->first();
         $count = $alerts->count();
-        
+
         $alertData = [
             'type' => 'batch_position_change',
             'priority' => $first['priority'],
-            'title' => ucfirst($first['type']) . " Alert: {$count} keywords",
-            'message' => "{$count} keywords experienced " . $first['type'] . " in rankings",
+            'title' => ucfirst($first['type']).sprintf(' Alert: %d keywords', $count),
+            'message' => $count.' keywords experienced '.$first['type'].' in rankings',
             'keywords' => $alerts->pluck('keyword.term')->toArray(),
-            'changes' => $alerts->map(function ($alert) {
+            'changes' => $alerts->map(function (array $alert): array {
                 return [
                     'keyword' => $alert['keyword']->term,
                     'change' => $alert['change'],
@@ -311,51 +368,5 @@ class TrackKeywordPositionsJob implements ShouldQueue
             ->where('status', 'scheduled')
             ->where('schedule->frequency', 'daily')
             ->exists();
-    }
-
-    /**
-     * Handle job failure
-     */
-    public function failed(Exception $exception): void
-    {
-        Log::error("Position tracking job permanently failed", [
-            'project_id' => $this->project->id,
-            'project_name' => $this->project->name,
-            'exception' => $exception->getMessage(),
-            'attempts' => $this->attempts(),
-        ]);
-
-        // Notify project administrators of the failure
-        try {
-            $notificationService = app(NotificationService::class);
-            $notificationService->sendPositionAlert($this->project, [
-                'type' => 'system_error',
-                'priority' => 'high',
-                'title' => 'Position Tracking Failed',
-                'message' => "Automated position tracking failed for {$this->project->name}. Please check your configuration.",
-                'error' => $exception->getMessage(),
-            ]);
-        } catch (Exception $e) {
-            Log::error("Failed to send failure notification", [
-                'project_id' => $this->project->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    /**
-     * Calculate the number of seconds to wait before retrying the job.
-     */
-    public function backoff(): array
-    {
-        return [30, 120, 300]; // 30 seconds, 2 minutes, 5 minutes
-    }
-
-    /**
-     * Determine if the job should be retried based on the exception.
-     */
-    public function retryUntil(): \DateTime
-    {
-        return now()->addMinutes(30); // Give up after 30 minutes
     }
 }

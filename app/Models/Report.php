@@ -1,16 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Report extends Model
+final class Report extends Model
 {
-    use HasFactory, SoftDeletes, BelongsToTenant;
+    use BelongsToTenant;
+    use HasFactory;
+    use SoftDeletes;
 
     protected $fillable = [
         'tenant_id',
@@ -57,34 +63,6 @@ class Report extends Model
         return $this->belongsTo(User::class);
     }
 
-    // Scopes
-    public function scopeActive($query)
-    {
-        return $query->where('is_active', true);
-    }
-
-    public function scopeAutomated($query)
-    {
-        return $query->where('is_automated', true);
-    }
-
-    public function scopeByType($query, string $type)
-    {
-        return $query->where('type', $type);
-    }
-
-    public function scopeByStatus($query, string $status)
-    {
-        return $query->where('status', $status);
-    }
-
-    public function scopeDueForGeneration($query)
-    {
-        return $query->where('is_automated', true)
-                    ->where('is_active', true)
-                    ->where('next_generation_at', '<=', now());
-    }
-
     // Report management methods
     public function markAsGenerating(): void
     {
@@ -114,9 +92,9 @@ class Report extends Model
         ]);
     }
 
-    public function calculateNextGeneration(): ?\Carbon\Carbon
+    public function calculateNextGeneration(): ?Carbon
     {
-        if (!$this->is_automated || !$this->is_active) {
+        if (! $this->is_automated || ! $this->is_active) {
             return null;
         }
 
@@ -131,7 +109,7 @@ class Report extends Model
 
     public function getFileSizeFormatted(): string
     {
-        if (!$this->file_size) {
+        if (! $this->file_size) {
             return 'Unknown';
         }
 
@@ -144,14 +122,47 @@ class Report extends Model
             $unitIndex++;
         }
 
-        return round($bytes, 2) . ' ' . $units[$unitIndex];
+        return round($bytes, 2).' '.$units[$unitIndex];
     }
 
     public function isDue(): bool
     {
-        return $this->is_automated && 
-               $this->is_active && 
-               $this->next_generation_at && 
+        return $this->is_automated &&
+               $this->is_active &&
+               $this->next_generation_at &&
                $this->next_generation_at->isPast();
+    }
+
+    // Scopes
+    #[Scope]
+    protected function active($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    #[Scope]
+    protected function automated($query)
+    {
+        return $query->where('is_automated', true);
+    }
+
+    #[Scope]
+    protected function byType($query, string $type)
+    {
+        return $query->where('type', $type);
+    }
+
+    #[Scope]
+    protected function byStatus($query, string $status)
+    {
+        return $query->where('status', $status);
+    }
+
+    #[Scope]
+    protected function dueForGeneration($query)
+    {
+        return $query->where('is_automated', true)
+            ->where('is_active', true)
+            ->where('next_generation_at', '<=', now());
     }
 }

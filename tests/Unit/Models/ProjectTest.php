@@ -1,17 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
+use App\Models\Competitor;
+use App\Models\Keyword;
+use App\Models\Notification;
 use App\Models\Project;
+use App\Models\Report;
 use App\Models\Tenant;
 use App\Models\User;
-use App\Models\Keyword;
-use App\Models\Competitor;
-use App\Models\Report;
-use App\Models\Notification;
+use Carbon\Carbon;
 
-describe('Project Model', function () {
-    
-    describe('Factory and Creation', function () {
-        it('can be created with valid data', function () {
+describe('Project Model', function (): void {
+
+    describe('Factory and Creation', function (): void {
+        it('can be created with valid data', function (): void {
             $tenant = Tenant::factory()->create();
             $user = User::factory()->for($tenant)->create();
             $project = Project::factory()->for($user)->for($tenant)->create();
@@ -23,25 +26,25 @@ describe('Project Model', function () {
             expect($project->is_active)->toBeTrue();
         });
 
-        it('extracts domain from URL automatically', function () {
+        it('extracts domain from URL automatically', function (): void {
             $tenant = Tenant::factory()->create();
             $project = Project::factory()->for($tenant)->create([
                 'url' => 'https://example.com/path',
-                'domain' => null
+                'domain' => null,
             ]);
 
             expect($project->domain)->toBe('example.com');
         });
 
-        it('can be created with specific domain', function () {
+        it('can be created with specific domain', function (): void {
             $domain = 'testsite.com';
             $project = Project::factory()->withDomain($domain)->create();
 
             expect($project->domain)->toBe($domain);
-            expect($project->url)->toBe("https://{$domain}");
+            expect($project->url)->toBe('https://'.$domain);
         });
 
-        it('can be created for specific countries', function () {
+        it('can be created for specific countries', function (): void {
             $countries = ['US', 'GB', 'CA'];
             $project = Project::factory()->forCountries($countries)->create();
 
@@ -49,8 +52,8 @@ describe('Project Model', function () {
         });
     });
 
-    describe('Relationships', function () {
-        it('belongs to a user', function () {
+    describe('Relationships', function (): void {
+        it('belongs to a user', function (): void {
             $user = User::factory()->create();
             $project = Project::factory()->for($user)->for($user->tenant)->create();
 
@@ -58,7 +61,7 @@ describe('Project Model', function () {
             expect($project->user->id)->toBe($user->id);
         });
 
-        it('has many keywords', function () {
+        it('has many keywords', function (): void {
             $project = Project::factory()->create();
             $keywords = Keyword::factory()->count(5)->for($project)->for($project->tenant)->create();
 
@@ -66,7 +69,7 @@ describe('Project Model', function () {
             expect($project->keywords->first())->toBeInstanceOf(Keyword::class);
         });
 
-        it('has many competitors', function () {
+        it('has many competitors', function (): void {
             $project = Project::factory()->create();
             $competitors = Competitor::factory()->count(3)->for($project)->for($project->tenant)->create();
 
@@ -74,7 +77,7 @@ describe('Project Model', function () {
             expect($project->competitors->first())->toBeInstanceOf(Competitor::class);
         });
 
-        it('has many reports', function () {
+        it('has many reports', function (): void {
             $project = Project::factory()->create();
             $reports = Report::factory()->count(2)->for($project)->for($project->tenant)->create();
 
@@ -82,7 +85,7 @@ describe('Project Model', function () {
             expect($project->reports->first())->toBeInstanceOf(Report::class);
         });
 
-        it('has many notifications', function () {
+        it('has many notifications', function (): void {
             $project = Project::factory()->create();
             $notifications = Notification::factory()->count(4)->for($project)->for($project->tenant)->create();
 
@@ -91,8 +94,8 @@ describe('Project Model', function () {
         });
     });
 
-    describe('Scopes', function () {
-        it('scopes active projects', function () {
+    describe('Scopes', function (): void {
+        it('scopes active projects', function (): void {
             $activeProject = Project::factory()->create(['is_active' => true]);
             $inactiveProject = Project::factory()->create(['is_active' => false]);
 
@@ -102,7 +105,7 @@ describe('Project Model', function () {
             expect($activeProjects)->not->toContain($inactiveProject);
         });
 
-        it('scopes projects by domain', function () {
+        it('scopes projects by domain', function (): void {
             $domain = 'example.com';
             $project1 = Project::factory()->withDomain($domain)->create();
             $project2 = Project::factory()->withDomain('other.com')->create();
@@ -114,17 +117,17 @@ describe('Project Model', function () {
         });
     });
 
-    describe('Analytics Methods', function () {
-        it('counts total keywords correctly', function () {
+    describe('Analytics Methods', function (): void {
+        it('counts total keywords correctly', function (): void {
             $project = Project::factory()->create();
             Keyword::factory()->count(10)->for($project)->for($project->tenant)->create();
 
             expect($project->getTotalKeywords())->toBe(10);
         });
 
-        it('counts active keywords correctly', function () {
+        it('counts active keywords correctly', function (): void {
             $project = Project::factory()->create();
-            
+
             // Create 7 active keywords and 3 inactive
             Keyword::factory()->count(7)->for($project)->for($project->tenant)->create(['is_tracking_active' => true]);
             Keyword::factory()->count(3)->for($project)->for($project->tenant)->create(['is_tracking_active' => false]);
@@ -132,9 +135,9 @@ describe('Project Model', function () {
             expect($project->getActiveKeywords())->toBe(7);
         });
 
-        it('counts top 10 keywords correctly', function () {
+        it('counts top 10 keywords correctly', function (): void {
             $project = Project::factory()->create();
-            
+
             // Create keywords with different positions
             Keyword::factory()->count(5)->for($project)->for($project->tenant)->create(['current_position' => 5]);
             Keyword::factory()->count(3)->for($project)->for($project->tenant)->create(['current_position' => 15]);
@@ -143,29 +146,29 @@ describe('Project Model', function () {
             expect($project->getTop10Keywords())->toBe(5);
         });
 
-        it('calculates average position correctly', function () {
+        it('calculates average position correctly', function (): void {
             $project = Project::factory()->create();
-            
+
             // Create keywords with specific positions: 2, 4, 6 (average should be 4.0)
             Keyword::factory()->for($project)->for($project->tenant)->create(['current_position' => 2]);
             Keyword::factory()->for($project)->for($project->tenant)->create(['current_position' => 4]);
             Keyword::factory()->for($project)->for($project->tenant)->create(['current_position' => 6]);
-            
+
             // Add one keyword with null position (should be ignored)
             Keyword::factory()->for($project)->for($project->tenant)->create(['current_position' => null]);
 
             expect($project->getAveragePosition())->toBe(4.0);
         });
 
-        it('handles empty keywords for average position', function () {
+        it('handles empty keywords for average position', function (): void {
             $project = Project::factory()->create();
 
             expect($project->getAveragePosition())->toBe(0.0);
         });
     });
 
-    describe('Position Update Logic', function () {
-        it('determines if needs position update correctly', function () {
+    describe('Position Update Logic', function (): void {
+        it('determines if needs position update correctly', function (): void {
             // Project never updated
             $project1 = Project::factory()->create(['last_positions_updated_at' => null]);
             expect($project1->needsPositionUpdate())->toBeTrue();
@@ -180,47 +183,47 @@ describe('Project Model', function () {
         });
     });
 
-    describe('Visibility Score Calculation', function () {
-        it('calculates visibility score correctly', function () {
+    describe('Visibility Score Calculation', function (): void {
+        it('calculates visibility score correctly', function (): void {
             $project = Project::factory()->create();
-            
+
             // Top 3 positions (1.0 each) = 2.0
             Keyword::factory()->count(2)->for($project)->for($project->tenant)->create(['current_position' => 1]);
-            
+
             // Positions 4-10 (0.5 each) = 1.0
             Keyword::factory()->count(2)->for($project)->for($project->tenant)->create(['current_position' => 8]);
-            
+
             // Positions 11-20 (0.1 each) = 0.2
             Keyword::factory()->count(2)->for($project)->for($project->tenant)->create(['current_position' => 15]);
-            
+
             // Beyond position 20 (0 each) = 0
             Keyword::factory()->count(2)->for($project)->for($project->tenant)->create(['current_position' => 50]);
-            
+
             // Total: 3.2 points out of 8 keywords = 40%
             $expectedScore = (3.2 / 8) * 100; // 40.0
-            
+
             expect($project->getVisibilityScore())->toBe(40.0);
         });
 
-        it('handles no keywords for visibility score', function () {
+        it('handles no keywords for visibility score', function (): void {
             $project = Project::factory()->create();
 
             expect($project->getVisibilityScore())->toBe(0.0);
         });
 
-        it('ignores null positions in visibility calculation', function () {
+        it('ignores null positions in visibility calculation', function (): void {
             $project = Project::factory()->create();
-            
+
             Keyword::factory()->for($project)->for($project->tenant)->create(['current_position' => 1]); // 1.0 point
             Keyword::factory()->for($project)->for($project->tenant)->create(['current_position' => null]); // ignored
-            
+
             // Should calculate based only on non-null positions
             expect($project->getVisibilityScore())->toBe(100.0);
         });
     });
 
-    describe('Casts and Attributes', function () {
-        it('casts attributes correctly', function () {
+    describe('Casts and Attributes', function (): void {
+        it('casts attributes correctly', function (): void {
             $project = Project::factory()->create([
                 'target_countries' => ['US', 'GB'],
                 'target_languages' => ['en'],
@@ -230,7 +233,7 @@ describe('Project Model', function () {
                 'settings' => ['frequency' => 'daily'],
                 'is_active' => '1',
                 'last_crawled_at' => '2024-01-01 12:00:00',
-                'last_positions_updated_at' => '2024-01-01 13:00:00'
+                'last_positions_updated_at' => '2024-01-01 13:00:00',
             ]);
 
             expect($project->target_countries)->toBeArray();
@@ -240,31 +243,31 @@ describe('Project Model', function () {
             expect($project->integrations)->toBeArray();
             expect($project->settings)->toBeArray();
             expect($project->is_active)->toBeTrue();
-            expect($project->last_crawled_at)->toBeInstanceOf(\Carbon\Carbon::class);
-            expect($project->last_positions_updated_at)->toBeInstanceOf(\Carbon\Carbon::class);
+            expect($project->last_crawled_at)->toBeInstanceOf(Carbon::class);
+            expect($project->last_positions_updated_at)->toBeInstanceOf(Carbon::class);
         });
     });
 
-    describe('Factory States', function () {
-        it('creates inactive projects', function () {
+    describe('Factory States', function (): void {
+        it('creates inactive projects', function (): void {
             $project = Project::factory()->inactive()->create();
 
             expect($project->is_active)->toBeFalse();
         });
 
-        it('creates projects that need update', function () {
+        it('creates projects that need update', function (): void {
             $project = Project::factory()->needsUpdate()->create();
 
             expect($project->needsPositionUpdate())->toBeTrue();
         });
 
-        it('creates recently updated projects', function () {
+        it('creates recently updated projects', function (): void {
             $project = Project::factory()->recentlyUpdated()->create();
 
             expect($project->needsPositionUpdate())->toBeFalse();
         });
 
-        it('creates projects with integrations enabled', function () {
+        it('creates projects with integrations enabled', function (): void {
             $project = Project::factory()->withIntegrations()->create();
 
             expect($project->integrations['google_search_console'])->toBeTrue();
@@ -273,14 +276,14 @@ describe('Project Model', function () {
         });
     });
 
-    describe('Business Logic Edge Cases', function () {
-        it('handles missing domain gracefully', function () {
+    describe('Business Logic Edge Cases', function (): void {
+        it('handles missing domain gracefully', function (): void {
             $project = Project::factory()->create(['domain' => null, 'url' => null]);
 
             expect($project->domain)->toBeNull();
         });
 
-        it('handles malformed URLs gracefully', function () {
+        it('handles malformed URLs gracefully', function (): void {
             // This tests the boot method's URL parsing
             $project = Project::factory()->make(['url' => 'not-a-url', 'domain' => null]);
             $project->save();
@@ -290,15 +293,15 @@ describe('Project Model', function () {
         });
     });
 
-    describe('Tenant Isolation', function () {
-        it('belongs to correct tenant', function () {
+    describe('Tenant Isolation', function (): void {
+        it('belongs to correct tenant', function (): void {
             $tenant = Tenant::factory()->create();
             $project = Project::factory()->for($tenant)->create();
 
             expect($project->tenant_id)->toBe($tenant->id);
         });
 
-        it('maintains tenant relationships through keywords', function () {
+        it('maintains tenant relationships through keywords', function (): void {
             $tenant = Tenant::factory()->create();
             $project = Project::factory()->for($tenant)->create();
             $keyword = Keyword::factory()->for($project)->for($tenant)->create();

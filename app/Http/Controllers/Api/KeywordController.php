@@ -1,21 +1,26 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\StoreKeywordRequest;
 use App\Http\Requests\Api\BulkKeywordRequest;
+use App\Http\Requests\Api\StoreKeywordRequest;
 use App\Http\Resources\KeywordResource;
 use App\Models\Keyword;
+use App\Models\KeywordPosition;
 use App\Models\Project;
-use App\Services\SerpTrackingService;
 use App\Services\SEOCalculationService;
+use App\Services\SerpTrackingService;
+use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
-class KeywordController extends Controller
+final class KeywordController extends Controller
 {
     public function __construct(
         private SerpTrackingService $serpTrackingService,
@@ -31,7 +36,7 @@ class KeywordController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = $request->user()->tenant->keywords()
-            ->with(['project', 'positions' => function($q) {
+            ->with(['project', 'positions' => function ($q): void {
                 $q->orderBy('tracked_at', 'desc')->limit(5);
             }]);
 
@@ -42,7 +47,7 @@ class KeywordController extends Controller
 
         // Search filter
         if ($request->search) {
-            $query->where('term', 'ILIKE', "%{$request->search}%");
+            $query->where('term', 'ILIKE', sprintf('%%%s%%', $request->search));
         }
 
         // Status filter
@@ -53,10 +58,11 @@ class KeywordController extends Controller
 
         // Position range filter
         if ($request->position_from || $request->position_to) {
-            $query->where(function($q) use ($request) {
+            $query->where(function ($q) use ($request): void {
                 if ($request->position_from) {
                     $q->where('latest_position', '>=', $request->position_from);
                 }
+
                 if ($request->position_to) {
                     $q->where('latest_position', '<=', $request->position_to);
                 }
@@ -65,10 +71,11 @@ class KeywordController extends Controller
 
         // Search volume range filter
         if ($request->volume_from || $request->volume_to) {
-            $query->where(function($q) use ($request) {
+            $query->where(function ($q) use ($request): void {
                 if ($request->volume_from) {
                     $q->where('search_volume', '>=', $request->volume_from);
                 }
+
                 if ($request->volume_to) {
                     $q->where('search_volume', '<=', $request->volume_to);
                 }
@@ -80,7 +87,7 @@ class KeywordController extends Controller
         $sortDirection = $request->direction ?? 'desc';
 
         if ($sortField === 'position') {
-            $query->orderByRaw('latest_position IS NULL, latest_position ' . $sortDirection);
+            $query->orderByRaw('latest_position IS NULL, latest_position '.$sortDirection);
         } else {
             $query->orderBy($sortField, $sortDirection);
         }
@@ -95,7 +102,7 @@ class KeywordController extends Controller
      */
     public function store(StoreKeywordRequest $request): KeywordResource
     {
-        $project = Project::findOrFail($request->project_id);
+        $project = Project::query()->findOrFail($request->project_id);
         $this->authorize('update', $project);
 
         // Calculate initial difficulty score
@@ -129,11 +136,11 @@ class KeywordController extends Controller
 
         $keyword->load([
             'project',
-            'positions' => function($query) {
+            'positions' => function ($query): void {
                 $query->with('serpFeatures')
-                      ->orderBy('tracked_at', 'desc')
-                      ->limit(100);
-            }
+                    ->orderBy('tracked_at', 'desc')
+                    ->limit(100);
+            },
         ]);
 
         return new KeywordResource($keyword);
@@ -147,16 +154,16 @@ class KeywordController extends Controller
         $this->authorize('update', $keyword->project);
 
         $request->validate([
-            'search_volume' => 'nullable|integer|min:0',
-            'location' => 'nullable|string|max:255',
-            'device' => 'nullable|in:desktop,mobile,tablet',
-            'language' => 'nullable|string|max:10',
-            'is_active' => 'boolean',
-            'tags' => 'nullable|array',
+            'search_volume' => ['nullable', 'integer', 'min:0'],
+            'location' => ['nullable', 'string', 'max:255'],
+            'device' => ['nullable', 'in:desktop,mobile,tablet'],
+            'language' => ['nullable', 'string', 'max:10'],
+            'is_active' => ['boolean'],
+            'tags' => ['nullable', 'array'],
         ]);
 
         $keyword->update($request->only([
-            'search_volume', 'location', 'device', 'language', 'is_active', 'tags'
+            'search_volume', 'location', 'device', 'language', 'is_active', 'tags',
         ]));
 
         $keyword->load(['project', 'positions']);
@@ -181,7 +188,7 @@ class KeywordController extends Controller
      */
     public function bulkImport(BulkKeywordRequest $request): JsonResponse
     {
-        $project = Project::findOrFail($request->project_id);
+        $project = Project::query()->findOrFail($request->project_id);
         $this->authorize('update', $project);
 
         $keywords = $request->keywords;
@@ -189,7 +196,7 @@ class KeywordController extends Controller
         $duplicates = 0;
         $errors = [];
 
-        DB::transaction(function() use ($keywords, $project, &$imported, &$duplicates, &$errors) {
+        DB::transaction(function () use ($keywords, $project, &$imported, &$duplicates, &$errors): void {
             foreach ($keywords as $keywordData) {
                 try {
                     // Check for duplicates
@@ -199,6 +206,7 @@ class KeywordController extends Controller
 
                     if ($exists) {
                         $duplicates++;
+
                         continue;
                     }
 
@@ -220,7 +228,7 @@ class KeywordController extends Controller
                     ]);
 
                     $imported++;
-                } catch (\Exception $e) {
+                } catch (Exception $e) {
                     $errors[] = [
                         'keyword' => $keywordData['term'],
                         'error' => $e->getMessage(),
@@ -244,9 +252,9 @@ class KeywordController extends Controller
     public function bulkUpdate(Request $request): JsonResponse
     {
         $request->validate([
-            'keyword_ids' => 'required|array',
-            'keyword_ids.*' => 'exists:keywords,id',
-            'updates' => 'required|array',
+            'keyword_ids' => ['required', 'array'],
+            'keyword_ids.*' => ['exists:keywords,id'],
+            'updates' => ['required', 'array'],
         ]);
 
         $keywords = $request->user()->tenant->keywords()
@@ -262,7 +270,7 @@ class KeywordController extends Controller
         }
 
         return response()->json([
-            'message' => "Updated {$updated} keywords successfully",
+            'message' => sprintf('Updated %d keywords successfully', $updated),
             'updated_count' => $updated,
         ]);
     }
@@ -276,7 +284,7 @@ class KeywordController extends Controller
 
         $position = $this->serpTrackingService->trackKeywordPosition($keyword);
 
-        if ($position) {
+        if ($position instanceof KeywordPosition) {
             return response()->json([
                 'message' => 'Position tracked successfully',
                 'position' => [
@@ -289,7 +297,7 @@ class KeywordController extends Controller
 
         return response()->json([
             'message' => 'Failed to track position',
-            'error' => 'Unable to fetch SERP data'
+            'error' => 'Unable to fetch SERP data',
         ], 422);
     }
 
@@ -299,8 +307,8 @@ class KeywordController extends Controller
     public function bulkTrack(Request $request): JsonResponse
     {
         $request->validate([
-            'keyword_ids' => 'required|array|max:100',
-            'keyword_ids.*' => 'exists:keywords,id',
+            'keyword_ids' => ['required', 'array', 'max:100'],
+            'keyword_ids.*' => ['exists:keywords,id'],
         ]);
 
         $keywords = $request->user()->tenant->keywords()
@@ -315,10 +323,10 @@ class KeywordController extends Controller
             if ($this->authorize('update', $keyword->project, false)) {
                 try {
                     $position = $this->serpTrackingService->trackKeywordPosition($keyword);
-                    if ($position) {
+                    if ($position instanceof KeywordPosition) {
                         $tracked++;
                     }
-                } catch (\Exception $e) {
+                } catch (Exception $e) {
                     $errors[] = [
                         'keyword' => $keyword->term,
                         'error' => $e->getMessage(),
@@ -345,7 +353,7 @@ class KeywordController extends Controller
         $days = $request->days ?? 30;
         $positions = $this->serpTrackingService->getPositionHistory($keyword, $days);
 
-        $history = $positions->map(function($position) {
+        $history = $positions->map(function ($position): array {
             return [
                 'position' => $position->position,
                 'url' => $position->url,
@@ -372,8 +380,8 @@ class KeywordController extends Controller
         $this->authorize('view', $project);
 
         $request->validate([
-            'seed_keyword' => 'required|string|max:255',
-            'limit' => 'nullable|integer|min:1|max:100',
+            'seed_keyword' => ['required', 'string', 'max:255'],
+            'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         // This would integrate with keyword research tools
@@ -450,8 +458,8 @@ class KeywordController extends Controller
                 }
             }
 
-            $performance['visibility_score'] = $totalVolume > 0 
-                ? round(($weightedPositions / $totalVolume) * 100, 2) 
+            $performance['visibility_score'] = $totalVolume > 0
+                ? round(($weightedPositions / $totalVolume) * 100, 2)
                 : 0;
         }
 
@@ -473,19 +481,19 @@ class KeywordController extends Controller
             $keywords->whereIn('id', $request->keyword_ids);
         }
 
-        $keywords = $keywords->with(['project', 'positions' => function($query) {
+        $keywords = $keywords->with(['project', 'positions' => function ($query): void {
             $query->orderBy('tracked_at', 'desc')->limit(1);
         }])->get();
 
         $csvData = [];
         $csvData[] = [
-            'Keyword', 'Project', 'Current Position', 'Search Volume', 
-            'Difficulty', 'Location', 'Device', 'Status', 'Last Tracked'
+            'Keyword', 'Project', 'Current Position', 'Search Volume',
+            'Difficulty', 'Location', 'Device', 'Status', 'Last Tracked',
         ];
 
         foreach ($keywords as $keyword) {
             $latestPosition = $keyword->positions->first();
-            
+
             $csvData[] = [
                 $keyword->term,
                 $keyword->project->name,
@@ -499,11 +507,11 @@ class KeywordController extends Controller
             ];
         }
 
-        $filename = 'keywords_export_' . now()->format('Y-m-d_H-i-s') . '.csv';
-        $filePath = storage_path('app/exports/' . $filename);
+        $filename = 'keywords_export_'.now()->format('Y-m-d_H-i-s').'.csv';
+        $filePath = storage_path('app/exports/'.$filename);
 
         // Ensure directory exists
-        if (!file_exists(dirname($filePath))) {
+        if (! file_exists(dirname($filePath))) {
             mkdir(dirname($filePath), 0755, true);
         }
 
@@ -511,6 +519,7 @@ class KeywordController extends Controller
         foreach ($csvData as $row) {
             fputcsv($file, $row);
         }
+
         fclose($file);
 
         return response()->json([
@@ -522,11 +531,25 @@ class KeywordController extends Controller
     }
 
     /**
+     * Download export file
+     */
+    public function downloadExport(string $filename): BinaryFileResponse
+    {
+        $filePath = storage_path('app/exports/'.$filename);
+
+        if (! file_exists($filePath)) {
+            abort(404, 'Export file not found');
+        }
+
+        return response()->download($filePath)->deleteFileAfterSend();
+    }
+
+    /**
      * Get CTR estimate for position
      */
     private function getCtrlForPosition(int $position): float
     {
-        return match(true) {
+        return match (true) {
             $position === 1 => 31.7,
             $position === 2 => 24.7,
             $position === 3 => 18.7,
@@ -535,19 +558,5 @@ class KeywordController extends Controller
             $position <= 50 => 0.5,
             default => 0.1,
         };
-    }
-
-    /**
-     * Download export file
-     */
-    public function downloadExport(string $filename): \Symfony\Component\HttpFoundation\BinaryFileResponse
-    {
-        $filePath = storage_path('app/exports/' . $filename);
-        
-        if (!file_exists($filePath)) {
-            abort(404, 'Export file not found');
-        }
-
-        return response()->download($filePath)->deleteFileAfterSend();
     }
 }

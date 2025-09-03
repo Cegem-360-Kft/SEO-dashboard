@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
@@ -7,9 +9,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class AuditLog extends Model
+final class AuditLog extends Model
 {
-    use HasFactory, BelongsToTenant;
+    use BelongsToTenant;
+    use HasFactory;
 
     protected $fillable = [
         'tenant_id',
@@ -32,27 +35,11 @@ class AuditLog extends Model
     ];
 
     /**
-     * Get the user that caused the audit log
-     */
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
-
-    /**
-     * Get the auditable model
-     */
-    public function auditable()
-    {
-        return $this->morphTo();
-    }
-
-    /**
      * Log a security event
      */
     public static function logSecurityEvent(string $event, array $data = [], ?Model $auditable = null): self
     {
-        return static::create([
+        return self::query()->create([
             'tenant_id' => auth()->user()?->tenant_id,
             'user_id' => auth()->id(),
             'event' => $event,
@@ -71,7 +58,7 @@ class AuditLog extends Model
      */
     public static function logAuthEvent(string $event, ?User $user = null, array $data = []): self
     {
-        return static::create([
+        return self::query()->create([
             'tenant_id' => $user?->tenant_id,
             'user_id' => $user?->id,
             'event' => $event,
@@ -88,10 +75,10 @@ class AuditLog extends Model
      */
     public static function logDataAccess(string $resource, string $action, ?Model $auditable = null): self
     {
-        return static::create([
+        return self::query()->create([
             'tenant_id' => auth()->user()?->tenant_id,
             'user_id' => auth()->id(),
-            'event' => "{$resource}.{$action}",
+            'event' => sprintf('%s.%s', $resource, $action),
             'auditable_type' => $auditable?->getMorphClass(),
             'auditable_id' => $auditable?->getKey(),
             'url' => request()?->fullUrl(),
@@ -99,5 +86,21 @@ class AuditLog extends Model
             'user_agent' => request()?->userAgent(),
             'tags' => ['data_access', $resource],
         ]);
+    }
+
+    /**
+     * Get the user that caused the audit log
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Get the auditable model
+     */
+    public function auditable()
+    {
+        return $this->morphTo();
     }
 }

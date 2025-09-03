@@ -1,14 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
 use App\Models\Keyword;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Keyword>
+ * @extends Factory<Keyword>
  */
-class KeywordFactory extends Factory
+final class KeywordFactory extends Factory
 {
     /**
      * Define the model's default state.
@@ -18,13 +20,13 @@ class KeywordFactory extends Factory
     public function definition(): array
     {
         $keyword = $this->generateKeyword();
-        
+
         return [
             'keyword' => $keyword,
-            'keyword_hash' => md5(strtolower(trim($keyword))),
+            'keyword_hash' => md5(mb_strtolower(mb_trim($keyword))),
             'priority' => fake()->randomElement(['low', 'medium', 'high', 'critical']),
             'categories' => fake()->randomElements([
-                'brand', 'product', 'informational', 'commercial', 'navigational'
+                'brand', 'product', 'informational', 'commercial', 'navigational',
             ], rand(1, 2)),
             'intent' => fake()->randomElement(['informational', 'navigational', 'commercial', 'transactional']),
             'country' => fake()->randomElement(['US', 'GB', 'CA', 'AU', 'DE', 'FR', 'ES']),
@@ -45,51 +47,11 @@ class KeywordFactory extends Factory
     }
 
     /**
-     * Generate realistic keywords
-     */
-    private function generateKeyword(): string
-    {
-        $keywordTypes = [
-            'product' => [
-                'buy', 'purchase', 'shop', 'order', 'price', 'cost', 'cheap', 'best', 'review'
-            ],
-            'service' => [
-                'service', 'company', 'professional', 'expert', 'consultant', 'agency'
-            ],
-            'informational' => [
-                'how to', 'what is', 'why', 'when', 'where', 'guide', 'tutorial', 'tips'
-            ],
-            'local' => [
-                'near me', 'in [city]', 'local', 'nearby'
-            ]
-        ];
-
-        $industries = [
-            'digital marketing', 'seo', 'web design', 'software development', 'consulting',
-            'real estate', 'healthcare', 'legal services', 'automotive', 'fitness',
-            'restaurant', 'hotel', 'ecommerce', 'saas', 'mobile app'
-        ];
-
-        $type = fake()->randomElement(array_keys($keywordTypes));
-        $modifier = fake()->randomElement($keywordTypes[$type]);
-        $industry = fake()->randomElement($industries);
-
-        // Generate different keyword patterns
-        return match ($type) {
-            'product' => "{$modifier} {$industry}",
-            'service' => "{$industry} {$modifier}",
-            'informational' => "{$modifier} {$industry}",
-            'local' => "{$industry} {$modifier}",
-            default => "{$modifier} {$industry}"
-        };
-    }
-
-    /**
      * Create a high-priority keyword
      */
     public function highPriority(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'priority' => 'high',
             'search_volume' => fake()->numberBetween(1000, 50000),
         ]);
@@ -100,7 +62,7 @@ class KeywordFactory extends Factory
      */
     public function highVolume(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'search_volume' => fake()->numberBetween(10000, 100000),
         ]);
     }
@@ -110,7 +72,7 @@ class KeywordFactory extends Factory
      */
     public function topTen(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'current_position' => fake()->numberBetween(1, 10),
             'previous_position' => fake()->optional()->numberBetween(1, 20),
             'is_tracking_active' => true,
@@ -122,7 +84,7 @@ class KeywordFactory extends Factory
      */
     public function topThree(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'current_position' => fake()->numberBetween(1, 3),
             'previous_position' => fake()->optional()->numberBetween(1, 10),
             'is_tracking_active' => true,
@@ -136,8 +98,8 @@ class KeywordFactory extends Factory
     {
         $current = fake()->numberBetween(1, 50);
         $previous = fake()->numberBetween($current + 1, 100);
-        
-        return $this->state(fn (array $attributes) => [
+
+        return $this->state(fn (array $attributes): array => [
             'current_position' => $current,
             'previous_position' => $previous,
             'is_tracking_active' => true,
@@ -151,8 +113,8 @@ class KeywordFactory extends Factory
     {
         $previous = fake()->numberBetween(1, 50);
         $current = fake()->numberBetween($previous + 1, 100);
-        
-        return $this->state(fn (array $attributes) => [
+
+        return $this->state(fn (array $attributes): array => [
             'current_position' => $current,
             'previous_position' => $previous,
             'is_tracking_active' => true,
@@ -164,7 +126,7 @@ class KeywordFactory extends Factory
      */
     public function inactive(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'is_tracking_active' => false,
         ]);
     }
@@ -174,7 +136,7 @@ class KeywordFactory extends Factory
      */
     public function withIntent(string $intent): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'intent' => $intent,
         ]);
     }
@@ -184,10 +146,50 @@ class KeywordFactory extends Factory
      */
     public function branded(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state(fn (array $attributes): array => [
             'categories' => ['brand'],
             'intent' => 'navigational',
             'current_position' => fake()->numberBetween(1, 5), // Brand keywords usually rank well
         ]);
+    }
+
+    /**
+     * Generate realistic keywords
+     */
+    private function generateKeyword(): string
+    {
+        $keywordTypes = [
+            'product' => [
+                'buy', 'purchase', 'shop', 'order', 'price', 'cost', 'cheap', 'best', 'review',
+            ],
+            'service' => [
+                'service', 'company', 'professional', 'expert', 'consultant', 'agency',
+            ],
+            'informational' => [
+                'how to', 'what is', 'why', 'when', 'where', 'guide', 'tutorial', 'tips',
+            ],
+            'local' => [
+                'near me', 'in [city]', 'local', 'nearby',
+            ],
+        ];
+
+        $industries = [
+            'digital marketing', 'seo', 'web design', 'software development', 'consulting',
+            'real estate', 'healthcare', 'legal services', 'automotive', 'fitness',
+            'restaurant', 'hotel', 'ecommerce', 'saas', 'mobile app',
+        ];
+
+        $type = fake()->randomElement(array_keys($keywordTypes));
+        $modifier = fake()->randomElement($keywordTypes[$type]);
+        $industry = fake()->randomElement($industries);
+
+        // Generate different keyword patterns
+        return match ($type) {
+            'product' => sprintf('%s %s', $modifier, $industry),
+            'service' => sprintf('%s %s', $industry, $modifier),
+            'informational' => sprintf('%s %s', $modifier, $industry),
+            'local' => sprintf('%s %s', $industry, $modifier),
+            default => sprintf('%s %s', $modifier, $industry)
+        };
     }
 }
