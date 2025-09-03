@@ -1,5 +1,9 @@
 <?php
 
+use App\Models\User;
+use App\Models\Tenant;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -12,8 +16,11 @@
 */
 
 pest()->extend(Tests\TestCase::class)
- // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
-    ->in('Feature');
+    ->use(RefreshDatabase::class)
+    ->in('Feature', 'Integration', 'Performance');
+
+pest()->extend(Tests\TestCase::class)
+    ->in('Unit');
 
 /*
 |--------------------------------------------------------------------------
@@ -30,6 +37,22 @@ expect()->extend('toBeOne', function () {
     return $this->toBe(1);
 });
 
+expect()->extend('toBeWithinRange', function (int $min, int $max) {
+    return $this->toBeGreaterThanOrEqual($min)->toBeLessThanOrEqual($max);
+});
+
+expect()->extend('toHaveValidPosition', function () {
+    return $this->toBeWithinRange(1, 100);
+});
+
+expect()->extend('toBeValidEmail', function () {
+    return $this->toMatch('/^[^\s@]+@[^\s@]+\.[^\s@]+$/');
+});
+
+expect()->extend('toBeValidUrl', function () {
+    return $this->toMatch('/^https?:\/\/.+/');
+});
+
 /*
 |--------------------------------------------------------------------------
 | Functions
@@ -41,7 +64,39 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+function createTenant(array $attributes = []): Tenant
 {
-    // ..
+    return Tenant::factory()->create($attributes);
+}
+
+function createUser(array $attributes = []): User
+{
+    return User::factory()->create($attributes);
+}
+
+function actingAsTenantUser(?User $user = null, ?Tenant $tenant = null): User
+{
+    $tenant = $tenant ?? createTenant();
+    $user = $user ?? User::factory()->for($tenant)->create();
+    
+    test()->actingAs($user);
+    
+    return $user;
+}
+
+function createAuthenticatedUser(array $userAttributes = [], array $tenantAttributes = []): array
+{
+    $tenant = createTenant($tenantAttributes);
+    $user = User::factory()->for($tenant)->create($userAttributes);
+    
+    test()->actingAs($user);
+    
+    return [$user, $tenant];
+}
+
+function mockExternalApis(): void
+{
+    config(['services.serp_api.mock' => true]);
+    config(['services.google_api.mock' => true]);
+    config(['services.analytics_api.mock' => true]);
 }
