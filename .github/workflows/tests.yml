@@ -1,11 +1,7 @@
 name: SEO Dashboard Tests
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
-
+  workflow_dispatch:
 env:
   CACHE_DRIVER: redis
   SESSION_DRIVER: redis
